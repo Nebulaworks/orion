@@ -18,5 +18,6 @@ setup(
     author_email='engineering@nebulaworks.com',
     url='https://github.com/Nebulaworks/orion',
     packages=find_packages(exclude=('tests', 'docs')),
+    entry_points={'console_scripts': ['flasksample = flasksample.app:main']},
     install_requires=requirements
 )
