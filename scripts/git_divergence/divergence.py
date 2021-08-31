@@ -5,7 +5,7 @@ import sys
 
 from git import Repo
 
-MASTER = "master"
+MASTER = os.getenv("GIT_AUTH_BRANCH", default="master")
 
 DATETIME = "%Y-%m-%d %H:%M:%S%z"
 
@@ -52,6 +52,17 @@ def get_divergence_report(repo):
             report.append(row)
 
     return sorted(report, key=lambda k: k["Divergence"], reverse=True)
+
+
+def get_max_len_of_col(repo_list, col_name):
+
+    top_length = 0
+    for _, curr_element in enumerate(repo_list, 0):
+        curr_len = len(curr_element.get(col_name, ""))
+        if curr_len > top_length:
+            top_length = curr_len
+
+    return top_length 
 
 
 def divergence_by_branch(repo, branch):
@@ -111,6 +122,12 @@ def main():
             "GIT_REPO_PATH not set. Export GIT_REPO_PATH=/path/to/git/repository and try again."
         )
         sys.exit(0)
+    if MASTER != "master":
+        print(
+            "GIT_AUTH_BRANCH has been set, using {branch} instead of master...".format(
+                branch=MASTER
+            )
+        )
     try:
         repo = Repo(repo_path)
     except:
@@ -126,7 +143,8 @@ def main():
 
     report = get_divergence_report(repo)
 
-    table = "{:32} {:^8} {:^8} {:^4} {:4} {:8}"
+    branch_name_len = str(get_max_len_of_col(report, "Branch"))
+    table = "{:" + branch_name_len + "} {:^8} {:^8} {:^4} {:4} {:8}"
 
     print(table.format("Branch", "Behind", "Ahead", "DSB", "DSLC", "DIVERGENCE"))
 
@@ -142,9 +160,7 @@ def main():
             )
         )
 
-    return report
-
 
 if __name__ == "__main__":
 
-    report = main()
+    main()
