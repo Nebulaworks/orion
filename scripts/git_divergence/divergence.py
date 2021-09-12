@@ -2,6 +2,7 @@ import datetime
 import os
 import re
 import sys
+import argparse
 
 from git import Repo
 
@@ -9,7 +10,17 @@ MASTER = os.getenv("GIT_AUTH_BRANCH", default="master")
 
 DATETIME = "%Y-%m-%d %H:%M:%S%z"
 
-BRANCH_FILTER = r"(.*RC\/.*)|([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"
+ap = argparse.ArgumentParser()
+ap.add_argument("-p", "--pattern", required=False, help="regex pattern for BRANCH_FILTER")
+
+args = vars(ap.parse_args())
+
+if args["pattern"] is not None:
+    # A filter patern was passed in
+    pattern = re.compile(args["pattern"])
+    BRANCH_FILTER = pattern
+else:
+    BRANCH_FILTER = r"(.*RC\/.*)|([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"
 
 
 def get_first_commit(repo, branch):
@@ -62,7 +73,7 @@ def get_max_len_of_col(repo_list, col_name):
         if curr_len > top_length:
             top_length = curr_len
 
-    return top_length 
+    return top_length
 
 
 def divergence_by_branch(repo, branch):
