@@ -1,0 +1,2 @@
+include requirements.txt
+include file_writer/templates/*.j2
