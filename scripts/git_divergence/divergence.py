@@ -128,11 +128,6 @@ def main():
 
     repo_path = os.getenv("GIT_REPO_PATH")
 
-    if repo_path is None:
-        print(
-            "GIT_REPO_PATH not set. Export GIT_REPO_PATH=/path/to/git/repository and try again."
-        )
-        sys.exit(0)
     if MASTER != "master":
         print(
             "GIT_AUTH_BRANCH has been set, using {branch} instead of master...".format(
