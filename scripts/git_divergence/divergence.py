@@ -6,7 +6,6 @@ import argparse
 
 from git import Repo
 
-MASTER = os.getenv("GIT_AUTH_BRANCH", default="master")
 
 DATETIME = "%Y-%m-%d %H:%M:%S%z"
 
@@ -46,6 +45,7 @@ def get_divergence_report(repo):
 
         br = str(head)
 
+        # 4 It will use a LIST of "regex" to first look for EXCLUSIONS (commonly named RC branches)
         if re.match(BRANCH_FILTER, br):
             continue
 
@@ -126,7 +126,29 @@ def print_repository(repo):
 
 def main():
 
+    # OK, here's how this is going to work.
+    # 1. CLI arg parser will have to be introduced
+
+    # args=argparser()
+
+    # 2. Determine repo_path
+    # Maintain backwards compatibiloty with the environment variable GIT_REPO_PATH
+
     repo_path = os.getenv("GIT_REPO_PATH")
+
+    # The CLI will be authoritative, so of the env variable is set it will be secondary to the CLI
+    # if args[repo_path]
+    # repo_path = args[repo_path]
+
+    # 3. Then it needs to determine what the TRUNK is
+    # Maintain backards compatibiloty with the environment variable GIT_AUTH_BRANCH
+
+    MASTER = os.getenv("GIT_AUTH_BRANCH", default="master")
+
+    # The CLI will be authoritative, so of the env variable is set it will be secondary to the CLI
+    # if args[repo_trunk]:
+        #MASTER = args[repo_trunk]
+        # after this works, MASTER will be renamed to MAIN for Diversity and Inclusivity Purposes
 
     if MASTER != "master":
         print(
@@ -134,6 +156,8 @@ def main():
                 branch=MASTER
             )
         )
+
+    # Once the CLI knows where the repo is, it can initialize the object Repo
     try:
         repo = Repo(repo_path)
     except:
