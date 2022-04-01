@@ -205,7 +205,8 @@ func (m Model) View() string {
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)
 
 	if m.Submitted {
-		b.WriteString(fmt.Sprintf("\n%s thank you for applying to Nebulaworks! We will follow up with you shortly via your email:%s regarding next steps\n", m.inputs[0].Value(), m.inputs[1].Value()))
+		b.WriteString(fmt.Sprintf("\n %s Thank you for applying to Nebulaworks!\n", m.inputs[0].Value()))
+		b.WriteString(fmt.Sprintf(" We will follow up with you via your email: %s\n", m.inputs[1].Value()))
 	}
 	b.WriteString(fmt.Sprintf("\n Resume status: %s \n\n", m.response))
 	b.WriteString(helpStyle.Render("ctrl+c to exit"))
