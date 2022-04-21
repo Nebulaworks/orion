@@ -7,7 +7,7 @@ mkShell {
 
   buildInputs = [
     go_1_17
-    delve
+    awscli2
   ];
 
   shellHook = ''
