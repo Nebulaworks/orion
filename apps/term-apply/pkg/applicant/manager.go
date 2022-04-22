@@ -5,6 +5,8 @@ import (
 	"log"
 	"reflect"
 	"sync"
+
+	"github.com/nebulaworks/orion/apps/term-apply/pkg/s3file"
 )
 
 type ApplicantManager struct {
@@ -13,6 +15,8 @@ type ApplicantManager struct {
 	writeChan  chan []applicant // serializes csv file writes
 	resumes    *resumeWatcher
 }
+
+const DATA_FILE_KEY = "/term-apply/data/applicants.csv"
 
 func NewApplicantManager(filename, uploadDir string) (*ApplicantManager, error) {
 	if err := openOrCreateFile(filename); err != nil {
@@ -92,6 +96,7 @@ func (a *ApplicantManager) AddApplicant(userID, name, email string, role int) er
 }
 
 func (a *ApplicantManager) readDataFile(filename string) error {
+	s3file.CopyFromS3(DATA_FILE_KEY, filename)
 	records, err := readData(filename)
 	if err != nil {
 		return err
@@ -133,6 +138,10 @@ func (a *ApplicantManager) writeDataFile(filename string, writeChan chan []appli
 		if err := writeData(filename, records); err != nil {
 			log.Printf("error writing file %s, %v", filename, err)
 			return err
+		}
+
+		if err := s3file.CopyToS3(filename, DATA_FILE_KEY); err != nil {
+			log.Printf("error writing to s3 %s, %s, %v", filename, DATA_FILE_KEY, err)
 		}
 	}
 }

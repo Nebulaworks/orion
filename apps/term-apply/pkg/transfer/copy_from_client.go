@@ -14,6 +14,7 @@ import (
 
 	"github.com/charmbracelet/wish/scp"
 	"github.com/gliderlabs/ssh"
+	"github.com/nebulaworks/orion/apps/term-apply/pkg/s3file"
 )
 
 type copyFromClientHandler struct {
@@ -43,8 +44,9 @@ func (c *copyFromClientHandler) Mkdir(s ssh.Session, entry *scp.DirEntry) error 
 }
 
 func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int64, error) {
-	fin := s.User()
-	f, err := os.OpenFile(c.prefixed(fin+"-"+"resume.pdf"), os.O_TRUNC|os.O_RDWR|os.O_CREATE, entry.Mode)
+	user := s.User()
+	filename := fmt.Sprintf("%s-resume.pdf", user)
+	f, err := os.OpenFile(c.prefixed(filename), os.O_TRUNC|os.O_RDWR|os.O_CREATE, entry.Mode)
 	if err != nil {
 		return 0, fmt.Errorf("failed to open file: %q: %w", entry.Filepath, err)
 	}
@@ -54,8 +56,18 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 
 	written, err := io.Copy(f, lr)
 	if err != nil {
-		return 0, fmt.Errorf("failed to write file: %q: %w", entry.Filepath, err)
+		log.Printf("error writing file %s, %v", filename, err)
+		return 0, fmt.Errorf("failed to write file: %q", entry.Filepath)
 	}
+
+	const RESUME_FILE_PREFIX = "/term-apply/resumes"
+	fileKey := fmt.Sprintf("%s/%s", RESUME_FILE_PREFIX, filename)
+	localFile := fmt.Sprintf("%s/%s", c.root, filename)
+	if err := s3file.CopyToS3(localFile, fileKey); err != nil {
+		log.Printf("error writing to s3 %s, %s, %v", filename, fileKey, err)
+		return 0, fmt.Errorf("failed to write file: %q", entry.Filepath)
+	}
+
 	return written, c.chtimes(entry.Filepath, entry.Mtime, entry.Atime)
 }
 
