@@ -93,6 +93,8 @@ The following roots are updated, but not `terraform applied`:
 ```
 </details>
 
+NOTE: This script currently only works on GitHub repos.
+
 ## Pre-Requirements
 - Python Version 3.8.X
 
