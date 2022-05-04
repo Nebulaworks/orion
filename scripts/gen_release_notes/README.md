@@ -1,6 +1,6 @@
 # gen_release_notes Python Module
 
-This directory contains the python code to generate a `markdown` friendly ChangeLog for a git repository. This changelog takes into account the following elements:
+This directory contains the python code to generate a `markdown` friendly ChangeLog for a GitHub repository. This changelog takes into account the following elements:
 - Changed directories in a given branch (usually a branch that is used in a release)
 - "Smartly" logging all commits and their respective merge PRs based on deployment environment and project
 - Outlining all hotfixes and bugs that came up in said release
@@ -93,6 +93,8 @@ The following roots are updated, but not `terraform applied`:
 ```
 </details>
 
+NOTE: This script currently only works on GitHub repos.
+
 ## Pre-Requirements
 - Python Version 3.8.X
 
@@ -121,7 +123,7 @@ The following roots are updated, but not `terraform applied`:
 $ export CONFIG_LOC="path/to/.gen_release.config"
 
 # This token should have repository read access
-$ export GIT_TOKEN="pat_value" 
+$ export GITHUB_TOKEN="pat_value" 
 ```
 
 3. Invoke the command
