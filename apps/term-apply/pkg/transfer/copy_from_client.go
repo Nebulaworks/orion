@@ -4,6 +4,7 @@ package transfer
 // https://pkg.go.dev/github.com/charmbracelet/wish/scp#CopyFromClientHandler
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -46,6 +47,16 @@ func (c *copyFromClientHandler) Mkdir(s ssh.Session, entry *scp.DirEntry) error 
 func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int64, error) {
 	user := s.User()
 	filename := fmt.Sprintf("%s-resume.pdf", user)
+
+	// Check if resume has been uploaded
+	_, err := os.Stat(c.prefixed(filename))
+
+	if errors.Is(err, os.ErrNotExist) {
+		log.Printf("Resume %s has not been uploaded: initial upload for %s.", filename, user)
+	} else {
+		log.Printf("Resume %s already exists: uploading replacement resume for %s.", filename, user)
+	}
+
 	f, err := os.OpenFile(c.prefixed(filename), os.O_TRUNC|os.O_RDWR|os.O_CREATE, entry.Mode)
 	if err != nil {
 		return 0, fmt.Errorf("failed to open file: %q: %w", entry.Filepath, err)
