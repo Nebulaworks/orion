@@ -23,8 +23,8 @@ type Server struct {
 	port int
 }
 
-func NewServer(host, uploadDir, dataFile string, port int) (*Server, error) {
-	am, err := applicant.NewApplicantManager(dataFile, uploadDir)
+func NewServer(c Config) (*Server, error) {
+	am, err := applicant.NewApplicantManager(c.csvTmpFile, c.resumeTmpDir)
 	if err != nil {
 		return nil, err
 	}
@@ -33,13 +33,13 @@ func NewServer(host, uploadDir, dataFile string, port int) (*Server, error) {
 	const SECONDS_FIVE_MINUTES = 300
 	ws, err := wish.NewServer(
 		ssh.PublicKeyAuth(auth.PkHandler),
-		wish.WithAddress(fmt.Sprintf("%s:%d", host, port)),
+		wish.WithAddress(fmt.Sprintf("%s:%d", c.host, c.port)),
 		wish.WithHostKeyPath(".ssh/term_info_ed25519"),
 		wish.WithMaxTimeout(time.Second*time.Duration(SECONDS_FIVE_MINUTES)),
 		wish.WithMiddleware(
 			scp.Middleware(
 				transfer.NewNilCopyHandler(),
-				transfer.NewCopyFromClientHandler(uploadDir)),
+				transfer.NewCopyFromClientHandler(c.resumeTmpDir)),
 			bubbletea.Middleware(tm.TeaHandler),
 			logging.Middleware(),
 		),
@@ -49,8 +49,8 @@ func NewServer(host, uploadDir, dataFile string, port int) (*Server, error) {
 	}
 	return &Server{
 		ws:   ws,
-		host: host,
-		port: port,
+		host: c.host,
+		port: c.port,
 	}, nil
 }
 
