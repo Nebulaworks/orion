@@ -8,19 +8,21 @@ import (
 	"github.com/nebulaworks/orion/apps/term-apply/pkg/s3file"
 )
 
-const RESUME_ROOT_KEY = "/term-apply/resumes/"
-
 type resumeWatcher struct {
-	uploadDir string
-	uploaded  []string
-	mu        *sync.Mutex
+	uploadDir    string
+	uploaded     []string
+	mu           *sync.Mutex
+	bucket       string
+	resumePrefix string
 }
 
-func newResumeWatcher(uploadDir string) (*resumeWatcher, error) {
+func newResumeWatcher(uploadDir, bucket, resumePrefix string) (*resumeWatcher, error) {
 	return &resumeWatcher{
-		uploadDir: uploadDir,
-		uploaded:  []string{},
-		mu:        &sync.Mutex{},
+		uploadDir:    uploadDir,
+		uploaded:     []string{},
+		mu:           &sync.Mutex{},
+		bucket:       bucket,
+		resumePrefix: resumePrefix,
 	}, nil
 }
 
@@ -30,7 +32,8 @@ func (r *resumeWatcher) isUploaded(userID string) bool {
 			return true
 		}
 	}
-	if s3file.S3keyExists(fmt.Sprintf("%s/%s-resume.pdf", RESUME_ROOT_KEY, userID)) {
+	key := fmt.Sprintf("%s/%s-resume.pdf", r.resumePrefix, userID)
+	if s3file.S3keyExists(r.bucket, key) {
 		log.Printf("Didn't find %s in uploaded list, but did find resume file in s3, adding...", userID)
 		r.mu.Lock()
 		defer r.mu.Unlock()

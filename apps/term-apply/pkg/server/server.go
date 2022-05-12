@@ -24,7 +24,7 @@ type Server struct {
 }
 
 func NewServer(c Config) (*Server, error) {
-	am, err := applicant.NewApplicantManager(c.csvTmpFile, c.resumeTmpDir)
+	am, err := applicant.NewApplicantManager(c.csvTmpFile, c.resumeTmpDir, c.s3Bucket, c.s3ResumePrefix, c.s3CsvPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func NewServer(c Config) (*Server, error) {
 		wish.WithMiddleware(
 			scp.Middleware(
 				transfer.NewNilCopyHandler(),
-				transfer.NewCopyFromClientHandler(c.resumeTmpDir)),
+				transfer.NewCopyFromClientHandler(c.resumeTmpDir, c.s3Bucket, c.s3ResumePrefix)),
 			bubbletea.Middleware(tm.TeaHandler),
 			logging.Middleware(),
 		),

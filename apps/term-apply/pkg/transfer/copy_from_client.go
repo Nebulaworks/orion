@@ -19,10 +19,12 @@ import (
 )
 
 type copyFromClientHandler struct {
-	root string
+	root         string
+	bucket       string
+	resumePrefix string
 }
 
-func NewCopyFromClientHandler(root string) *copyFromClientHandler {
+func NewCopyFromClientHandler(root, bucket, resumePrefix string) *copyFromClientHandler {
 	rootInfo, err := os.Stat(root)
 	if os.IsNotExist(err) {
 		log.Fatal(root + " doesn't exist")
@@ -31,7 +33,9 @@ func NewCopyFromClientHandler(root string) *copyFromClientHandler {
 		log.Fatal(root + " is not a directory")
 	}
 	return &copyFromClientHandler{
-		root: filepath.Clean(root),
+		root:         filepath.Clean(root),
+		bucket:       bucket,
+		resumePrefix: resumePrefix,
 	}
 }
 
@@ -71,10 +75,9 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 		return 0, fmt.Errorf("failed to write file: %q", entry.Filepath)
 	}
 
-	const RESUME_FILE_PREFIX = "/term-apply/resumes"
-	fileKey := fmt.Sprintf("%s/%s", RESUME_FILE_PREFIX, filename)
+	fileKey := fmt.Sprintf("%s/%s", c.resumePrefix, filename)
 	localFile := fmt.Sprintf("%s/%s", c.root, filename)
-	if err := s3file.CopyToS3(localFile, fileKey); err != nil {
+	if err := s3file.CopyToS3(c.bucket, localFile, fileKey); err != nil {
 		log.Printf("error writing to s3 %s, %s, %v", filename, fileKey, err)
 		return 0, fmt.Errorf("failed to write file: %q", entry.Filepath)
 	}

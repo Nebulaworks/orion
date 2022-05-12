@@ -14,26 +14,29 @@ type ApplicantManager struct {
 	mu         *sync.RWMutex    // wraps applicant slice access
 	writeChan  chan []applicant // serializes csv file writes
 	resumes    *resumeWatcher
+	bucket     string
+	csvKey     string
 }
 
-const DATA_FILE_KEY = "/term-apply/data/applicants.csv"
-
-func NewApplicantManager(filename, uploadDir string) (*ApplicantManager, error) {
+func NewApplicantManager(filename, uploadDir, bucket, resumePrefix, csvPrefix string) (*ApplicantManager, error) {
 	if err := openOrCreateFile(filename); err != nil {
 		return nil, err
 	}
 	writeChan := make(chan []applicant)
 
-	resumes, err := newResumeWatcher(uploadDir)
+	resumes, err := newResumeWatcher(uploadDir, bucket, resumePrefix)
 	if err != nil {
 		return nil, err
 	}
 
+	csvKey := fmt.Sprintf("%s/%s", csvPrefix, filename)
 	am := &ApplicantManager{
 		applicants: []applicant{},
 		mu:         &sync.RWMutex{},
 		writeChan:  writeChan,
 		resumes:    resumes,
+		bucket:     bucket,
+		csvKey:     csvKey,
 	}
 
 	if err := am.readDataFile(filename); err != nil {
@@ -96,7 +99,7 @@ func (a *ApplicantManager) AddApplicant(userID, name, email string, role int) er
 }
 
 func (a *ApplicantManager) readDataFile(filename string) error {
-	s3file.CopyFromS3(DATA_FILE_KEY, filename)
+	s3file.CopyFromS3(a.bucket, a.csvKey, filename)
 	records, err := readData(filename)
 	if err != nil {
 		return err
@@ -140,8 +143,8 @@ func (a *ApplicantManager) writeDataFile(filename string, writeChan chan []appli
 			return err
 		}
 
-		if err := s3file.CopyToS3(filename, DATA_FILE_KEY); err != nil {
-			log.Printf("error writing to s3 %s, %s, %v", filename, DATA_FILE_KEY, err)
+		if err := s3file.CopyToS3(a.bucket, filename, a.csvKey); err != nil {
+			log.Printf("error writing to s3 %s, %s, %v", filename, a.csvKey, err)
 		}
 	}
 }

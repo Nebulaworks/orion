@@ -12,12 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
-func CopyFromS3(key, filename string) error {
-	bucket, ok := os.LookupEnv("TA_BUCKET")
-	if !ok {
-		log.Printf("TA_BUCKET not defined, %s not written to %s", key, filename)
-		return nil
-	}
+func CopyFromS3(bucket, key, filename string) error {
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("cannot create %s", filename)
@@ -50,12 +45,7 @@ func CopyFromS3(key, filename string) error {
 	return nil
 }
 
-func CopyToS3(filename, key string) error {
-	bucket, ok := os.LookupEnv("TA_BUCKET")
-	if !ok {
-		log.Printf("TA_BUCKET not defined, %s not written to %s", filename, key)
-		return nil
-	}
+func CopyToS3(bucket, filename, key string) error {
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
 	})
@@ -87,12 +77,7 @@ func CopyToS3(filename, key string) error {
 	return nil
 }
 
-func S3keyExists(key string) bool {
-	bucket, ok := os.LookupEnv("TA_BUCKET")
-	if !ok {
-		log.Printf("TA_BUCKET not defined, skipping lookup of %s", key)
-		return false
-	}
+func S3keyExists(bucket, key string) bool {
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
 	})
