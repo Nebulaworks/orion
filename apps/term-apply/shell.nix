@@ -8,6 +8,7 @@ mkShell {
   buildInputs = [
     go_1_17
     awscli2
+    gnumake
   ];
 
   shellHook = ''
