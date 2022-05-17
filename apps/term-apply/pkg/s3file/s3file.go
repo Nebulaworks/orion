@@ -94,7 +94,6 @@ func S3keyExists(bucket, key string) bool {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case "NotFound":
-				log.Printf("NotFound")
 				return false
 			default:
 				log.Printf("%v", err)
