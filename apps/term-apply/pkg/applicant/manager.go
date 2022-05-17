@@ -3,6 +3,7 @@ package applicant
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 	"reflect"
 	"sync"
 
@@ -18,8 +19,8 @@ type ApplicantManager struct {
 	csvKey     string
 }
 
-func NewApplicantManager(filename, uploadDir, bucket, resumePrefix, csvPrefix string) (*ApplicantManager, error) {
-	if err := openOrCreateFile(filename); err != nil {
+func NewApplicantManager(path, uploadDir, bucket, resumePrefix, csvPrefix string) (*ApplicantManager, error) {
+	if err := openOrCreateFile(path); err != nil {
 		return nil, err
 	}
 	writeChan := make(chan []applicant)
@@ -29,6 +30,7 @@ func NewApplicantManager(filename, uploadDir, bucket, resumePrefix, csvPrefix st
 		return nil, err
 	}
 
+	filename := filepath.Base(path)
 	csvKey := fmt.Sprintf("%s/%s", csvPrefix, filename)
 	am := &ApplicantManager{
 		applicants: []applicant{},
@@ -39,11 +41,11 @@ func NewApplicantManager(filename, uploadDir, bucket, resumePrefix, csvPrefix st
 		csvKey:     csvKey,
 	}
 
-	if err := am.readDataFile(filename); err != nil {
+	if err := am.readDataFile(path); err != nil {
 		return nil, err
 	}
 
-	go am.writeDataFile(filename, writeChan)
+	go am.writeDataFile(path, writeChan)
 
 	return am, nil
 }
