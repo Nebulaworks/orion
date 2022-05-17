@@ -57,6 +57,7 @@ func CopyToS3(bucket, filename, key string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open file %q, %v", filename, err)
 	}
+	defer content.Close()
 	result, err := uploader.Upload(&s3manager.UploadInput{
 		Body:    content,
 		Bucket:  aws.String(bucket),
@@ -94,7 +95,6 @@ func S3keyExists(bucket, key string) bool {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case "NotFound":
-				log.Printf("NotFound")
 				return false
 			default:
 				log.Printf("%v", err)
