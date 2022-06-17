@@ -4,7 +4,6 @@ package transfer
 // https://pkg.go.dev/github.com/charmbracelet/wish/scp#CopyFromClientHandler
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -53,14 +52,16 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 
 	user := s.User()
 	filename := fmt.Sprintf("%s-resume.pdf", user)
+	fileKey := fmt.Sprintf("%s/%s", c.resumePrefix, filename)
+	localFile := fmt.Sprintf("%s/%s", c.root, filename)
 
 	// Check if resume has been uploaded
 	_, err := os.Stat(c.prefixed(filename))
 
-	if errors.Is(err, os.ErrNotExist) {
-		log.Printf("Resume %s has not been uploaded: initial upload for %s.", filename, user)
-	} else {
+	if s3file.S3keyExists(c.bucket, fileKey) {
 		log.Printf("Resume %s already exists: uploading replacement resume for %s.", filename, user)
+	} else {
+		log.Printf("Resume %s has not been uploaded: initial upload for %s.", filename, user)
 	}
 
 	// Write scp input to temp file for validity checking
@@ -89,7 +90,13 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 	}
 	if !(mtype.String() == "application/pdf" || mtype.String() == "application/x-pdf") {
 		log.Printf("Provided file failed PDF validity check")
-		return 0, fmt.Errorf("Provided file failed PDF validity check")
+		var sts string
+		if s3file.S3keyExists(c.bucket, fileKey) {
+			sts = fmt.Sprintf("Last valid upload by user %s on %s", user, s3file.S3keyLastModified(c.bucket, fileKey))
+		} else {
+			sts = fmt.Sprintf("No valid file has been uploaded by user %s", user)
+		}
+		return 0, fmt.Errorf("Provided file failed PDF validity check\n%s", sts)
 	}
 	log.Printf("Provided file passed PDF vaildity check with type %s", mtype.String())
 
@@ -114,8 +121,6 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 	}
 
 	// copy validated file to s3
-	fileKey := fmt.Sprintf("%s/%s", c.resumePrefix, filename)
-	localFile := fmt.Sprintf("%s/%s", c.root, filename)
 
 	if err := s3file.CopyToS3(c.bucket, localFile, fileKey); err != nil {
 		log.Printf("error writing to s3 %s, %s, %v", filename, fileKey, err)
