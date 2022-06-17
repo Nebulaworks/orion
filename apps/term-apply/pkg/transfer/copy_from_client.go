@@ -63,25 +63,26 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 		log.Printf("Resume %s already exists: uploading replacement resume for %s.", filename, user)
 	}
 
-	f, err := os.OpenFile(c.prefixed(filename), os.O_TRUNC|os.O_RDWR|os.O_CREATE, entry.Mode)
+	// Write scp input to temp file for validity checking
+	t, err := os.OpenFile(c.prefixed("temp"), os.O_TRUNC|os.O_RDWR|os.O_CREATE, entry.Mode)
 	if err != nil {
 		return 0, fmt.Errorf("failed to open file: %q: %w", entry.Filepath, err)
 	}
 
+	// check size constraint usin limit reader
 	const BYTES_TEN_MEGABYTES = 10485760
 
 	lr := newLimitReader(entry.Reader, BYTES_TEN_MEGABYTES)
 
-	written, err := io.Copy(f, lr)
+	written, err := io.Copy(t, lr)
 	if err != nil {
 		log.Printf("error writing file %s, %v", filename, err)
 		return 0, fmt.Errorf("failed to write file: %q", entry.Filepath)
 	}
 
-	fileKey := fmt.Sprintf("%s/%s", c.resumePrefix, filename)
-	localFile := fmt.Sprintf("%s/%s", c.root, filename)
-
-	mtype, err := mimetype.DetectFile(localFile)
+	// validate contents of uploaded file
+	tempFile := fmt.Sprintf("%s/%s", c.root, "temp")
+	mtype, err := mimetype.DetectFile(tempFile)
 	if err != nil {
 		log.Printf("error checking pdf validity: %v", err)
 		return 0, fmt.Errorf("error occured while pdf validity")
@@ -91,6 +92,30 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 		return 0, fmt.Errorf("Provided file failed PDF validity check")
 	}
 	log.Printf("Provided file passed PDF vaildity check with type %s", mtype.String())
+
+	// copy valid upload file to final file path
+	t, _ = os.Open(tempFile)
+
+	f, err := os.OpenFile(c.prefixed(filename), os.O_TRUNC|os.O_RDWR|os.O_CREATE, entry.Mode)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open file: %q: %w", entry.Filepath, err)
+	}
+
+	written, err = io.Copy(f, t)
+	if err != nil {
+		log.Printf("error writing file %s, %v", filename, err)
+		return 0, fmt.Errorf("failed to write file: %q", entry.Filepath)
+	}
+
+	// delete temporary file
+	err = os.Remove(tempFile)
+	if err != nil {
+		log.Printf("failed to delete temp upload file")
+	}
+
+	// copy validated file to s3
+	fileKey := fmt.Sprintf("%s/%s", c.resumePrefix, filename)
+	localFile := fmt.Sprintf("%s/%s", c.root, filename)
 
 	if err := s3file.CopyToS3(c.bucket, localFile, fileKey); err != nil {
 		log.Printf("error writing to s3 %s, %s, %v", filename, fileKey, err)
