@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/wish/scp"
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/gliderlabs/ssh"
 	"github.com/nebulaworks/orion/apps/term-apply/pkg/s3file"
 )
@@ -49,6 +50,7 @@ func (c *copyFromClientHandler) Mkdir(s ssh.Session, entry *scp.DirEntry) error 
 }
 
 func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int64, error) {
+
 	user := s.User()
 	filename := fmt.Sprintf("%s-resume.pdf", user)
 
@@ -67,6 +69,7 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 	}
 
 	const BYTES_TEN_MEGABYTES = 10485760
+
 	lr := newLimitReader(entry.Reader, BYTES_TEN_MEGABYTES)
 
 	written, err := io.Copy(f, lr)
@@ -77,6 +80,18 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 
 	fileKey := fmt.Sprintf("%s/%s", c.resumePrefix, filename)
 	localFile := fmt.Sprintf("%s/%s", c.root, filename)
+
+	mtype, err := mimetype.DetectFile(localFile)
+	if err != nil {
+		log.Printf("error checking pdf validity: %v", err)
+		return 0, fmt.Errorf("error occured while pdf validity")
+	}
+	if !(mtype.String() == "application/pdf" || mtype.String() == "application/x-pdf") {
+		log.Printf("Provided file failed PDF validity check")
+		return 0, fmt.Errorf("Provided file failed PDF validity check")
+	}
+	log.Printf("Provided file passed PDF vaildity check with type %s", mtype.String())
+
 	if err := s3file.CopyToS3(c.bucket, localFile, fileKey); err != nil {
 		log.Printf("error writing to s3 %s, %s, %v", filename, fileKey, err)
 		return 0, fmt.Errorf("failed to write file: %q", entry.Filepath)
