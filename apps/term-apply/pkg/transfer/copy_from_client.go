@@ -67,7 +67,7 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 	// Write scp input to temp file for validity checking
 	t, err := os.OpenFile(c.prefixed("temp"), os.O_TRUNC|os.O_RDWR|os.O_CREATE, entry.Mode)
 	if err != nil {
-		return 0, fmt.Errorf("failed to open file: %q: %w", entry.Filepath, err)
+		return 0, fmt.Errorf("\nfailed to open file: %q: %w", entry.Filepath, err)
 	}
 
 	// check size constraint usin limit reader
@@ -78,7 +78,7 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 	written, err := io.Copy(t, lr)
 	if err != nil {
 		log.Printf("error writing file %s, %v", filename, err)
-		return 0, fmt.Errorf("failed to write file: %q", entry.Filepath)
+		return 0, fmt.Errorf("\nProvided file is too large. Maximum size is 10MB\n%s", getLastResumeStatus(c.bucket, fileKey, user))
 	}
 
 	// validate contents of uploaded file
@@ -90,13 +90,7 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 	}
 	if !(mtype.String() == "application/pdf" || mtype.String() == "application/x-pdf") {
 		log.Printf("Provided file failed PDF validity check")
-		var sts string
-		if s3file.S3keyExists(c.bucket, fileKey) {
-			sts = fmt.Sprintf("Last valid upload by user %s on %s", user, s3file.S3keyLastModified(c.bucket, fileKey))
-		} else {
-			sts = fmt.Sprintf("No valid file has been uploaded by user %s", user)
-		}
-		return 0, fmt.Errorf("Provided file failed PDF validity check\n%s", sts)
+		return 0, fmt.Errorf("\nProvided file failed PDF validity check\n%s", getLastResumeStatus(c.bucket, fileKey, user))
 	}
 	log.Printf("Provided file passed PDF vaildity check with type %s", mtype.String())
 
@@ -105,13 +99,13 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 
 	f, err := os.OpenFile(c.prefixed(filename), os.O_TRUNC|os.O_RDWR|os.O_CREATE, entry.Mode)
 	if err != nil {
-		return 0, fmt.Errorf("failed to open file: %q: %w", entry.Filepath, err)
+		return 0, fmt.Errorf("\nfailed to open file: %q: %w", entry.Filepath, err)
 	}
 
 	written, err = io.Copy(f, t)
 	if err != nil {
 		log.Printf("error writing file %s, %v", filename, err)
-		return 0, fmt.Errorf("failed to write file: %q", entry.Filepath)
+		return 0, fmt.Errorf("\nfailed to write file: %q", entry.Filepath)
 	}
 
 	// delete temporary file
@@ -124,10 +118,20 @@ func (c *copyFromClientHandler) Write(s ssh.Session, entry *scp.FileEntry) (int6
 
 	if err := s3file.CopyToS3(c.bucket, localFile, fileKey); err != nil {
 		log.Printf("error writing to s3 %s, %s, %v", filename, fileKey, err)
-		return 0, fmt.Errorf("failed to write file: %q", entry.Filepath)
+		return 0, fmt.Errorf("\nfailed to write file: %q", entry.Filepath)
 	}
 
 	return written, c.chtimes(entry.Filepath, entry.Mtime, entry.Atime)
+}
+
+func getLastResumeStatus(bucket, fileKey string, user string) string {
+	var sts string
+	if s3file.S3keyExists(bucket, fileKey) {
+		sts = fmt.Sprintf("Last valid upload by user %s on %s", user, s3file.S3keyLastModified(bucket, fileKey))
+	} else {
+		sts = fmt.Sprintf("No valid file has been uploaded by user %s", user)
+	}
+	return sts
 }
 
 func (c *copyFromClientHandler) chtimes(path string, mtime, atime int64) error {
@@ -139,7 +143,7 @@ func (c *copyFromClientHandler) chtimes(path string, mtime, atime int64) error {
 		time.Unix(atime, 0),
 		time.Unix(mtime, 0),
 	); err != nil {
-		return fmt.Errorf("failed to chtimes: %q: %w", path, err)
+		return fmt.Errorf("\nfailed to chtimes: %q: %w", path, err)
 	}
 	return nil
 }

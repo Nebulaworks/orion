@@ -10,6 +10,7 @@ as an unexported type, we've had to replicate it here for now.
 */
 
 import (
+	"fmt"
 	"io"
 	"sync"
 )
@@ -33,7 +34,7 @@ func (r *limitReader) Read(b []byte) (int, error) {
 	defer r.lock.Unlock()
 
 	if r.left <= 0 {
-		return 0, io.EOF
+		return 0, fmt.Errorf("Uploaded file too large")
 	}
 	if len(b) > r.left {
 		b = b[0:r.left]
