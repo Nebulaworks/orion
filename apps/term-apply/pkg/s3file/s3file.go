@@ -106,3 +106,21 @@ func S3keyExists(bucket, key string) bool {
 	}
 	return true
 }
+
+// Returns
+func S3keyLastModified(bucket, key string) string {
+	sess, err := session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	})
+	if err != nil {
+		log.Printf("%v", err)
+	}
+	svc := s3.New(sess)
+
+	obj, err := svc.GetObject(&s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+
+	return obj.LastModified.Format("2006-01-02 15:04:05 UTC")
+}
