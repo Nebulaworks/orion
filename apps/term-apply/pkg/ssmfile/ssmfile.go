@@ -3,12 +3,19 @@ package ssmfile
 import (
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ssm"
 )
 
 func GetParamFromSSM(paramName, path string) error {
+	log.Printf("Searching for Path")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		dir, _ := filepath.Split(path)
+		os.MkdirAll(dir, 0700)
+	}
+
 	log.Printf("Creating File")
 	file, err := os.Create(path)
 	if err != nil {
