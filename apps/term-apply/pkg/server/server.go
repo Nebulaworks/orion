@@ -36,6 +36,8 @@ func NewServer(c Config) (*Server, error) {
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		log.Printf("No SSM Parameter given, using local file for SSH Host Key")
 	}
 
 	const SECONDS_FIVE_MINUTES = 300
