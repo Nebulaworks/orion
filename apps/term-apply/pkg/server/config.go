@@ -67,11 +67,12 @@ func NewConfig() Config {
 	if !ok {
 		ssmHostKeyParam = ""
 	}
-
+	log.Printf("TA_SSM_HOST_KEY_PARAM set to '%s'", ssmHostKeyParam)
 	hostKeyPath, ok := os.LookupEnv("TA_HOST_KEY_PATH")
 	if !ok {
 		hostKeyPath = ".ssh/term_info_ed25519"
 	}
+	log.Printf("TA_HOST_KEY_PATH set to '%s'", hostKeyPath)
 
 	return Config{
 		host:            host,
