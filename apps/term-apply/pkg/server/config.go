@@ -15,7 +15,7 @@ type Config struct {
 	s3CsvPrefix     string
 	s3ResumePrefix  string
 	ssmHostKeyParam string
-	ssmHostKeyPath  string
+	hostKeyPath     string
 }
 
 func NewConfig() Config {
@@ -68,9 +68,9 @@ func NewConfig() Config {
 		ssmHostKeyParam = ""
 	}
 
-	ssmHostKeyPath, ok := os.LookupEnv("TA_SSM_HOST_KEY_PATH")
+	hostKeyPath, ok := os.LookupEnv("TA_HOST_KEY_PATH")
 	if !ok {
-		ssmHostKeyPath = ".ssh/term_info_ed25519"
+		hostKeyPath = ".ssh/term_info_ed25519"
 	}
 
 	return Config{
@@ -82,6 +82,6 @@ func NewConfig() Config {
 		s3CsvPrefix:     s3CsvPrefix,
 		s3ResumePrefix:  s3ResumePrefix,
 		ssmHostKeyParam: ssmHostKeyParam,
-		ssmHostKeyPath:  ssmHostKeyPath,
+		hostKeyPath:     hostKeyPath,
 	}
 }

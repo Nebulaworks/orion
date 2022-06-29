@@ -32,7 +32,7 @@ func NewServer(c Config) (*Server, error) {
 	tm := ui.NewTeaManager(am)
 
 	if c.ssmHostKeyParam != "" {
-		err = ssmfile.GetParamFromSSM(c.ssmHostKeyParam, c.ssmHostKeyPath)
+		err = ssmfile.GetParamFromSSM(c.ssmHostKeyParam, c.hostKeyPath)
 		if err != nil {
 			return nil, err
 		}
@@ -42,7 +42,7 @@ func NewServer(c Config) (*Server, error) {
 	ws, err := wish.NewServer(
 		ssh.PublicKeyAuth(auth.PkHandler),
 		wish.WithAddress(fmt.Sprintf("%s:%d", c.host, c.port)),
-		wish.WithHostKeyPath(c.ssmHostKeyPath),
+		wish.WithHostKeyPath(c.hostKeyPath),
 		wish.WithMaxTimeout(time.Second*time.Duration(SECONDS_FIVE_MINUTES)),
 		wish.WithMiddleware(
 			scp.Middleware(
