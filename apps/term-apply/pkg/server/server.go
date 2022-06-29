@@ -13,6 +13,7 @@ import (
 	"github.com/gliderlabs/ssh"
 	"github.com/nebulaworks/orion/apps/term-apply/pkg/applicant"
 	"github.com/nebulaworks/orion/apps/term-apply/pkg/auth"
+	"github.com/nebulaworks/orion/apps/term-apply/pkg/ssmfile"
 	"github.com/nebulaworks/orion/apps/term-apply/pkg/transfer"
 	"github.com/nebulaworks/orion/apps/term-apply/pkg/ui"
 )
@@ -30,11 +31,20 @@ func NewServer(c Config) (*Server, error) {
 	}
 	tm := ui.NewTeaManager(am)
 
+	if c.ssmHostKeyParam != "" {
+		err = ssmfile.GetParamFromSSM(c.ssmHostKeyParam, c.hostKeyPath)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		log.Printf("No SSM Parameter given, using local file for SSH Host Key")
+	}
+
 	const SECONDS_FIVE_MINUTES = 300
 	ws, err := wish.NewServer(
 		ssh.PublicKeyAuth(auth.PkHandler),
 		wish.WithAddress(fmt.Sprintf("%s:%d", c.host, c.port)),
-		wish.WithHostKeyPath(".ssh/term_info_ed25519"),
+		wish.WithHostKeyPath(c.hostKeyPath),
 		wish.WithMaxTimeout(time.Second*time.Duration(SECONDS_FIVE_MINUTES)),
 		wish.WithMiddleware(
 			scp.Middleware(

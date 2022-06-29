@@ -7,13 +7,15 @@ import (
 )
 
 type Config struct {
-	host           string
-	port           int
-	csvTmpFile     string
-	resumeTmpDir   string
-	s3Bucket       string
-	s3CsvPrefix    string
-	s3ResumePrefix string
+	host            string
+	port            int
+	csvTmpFile      string
+	resumeTmpDir    string
+	s3Bucket        string
+	s3CsvPrefix     string
+	s3ResumePrefix  string
+	ssmHostKeyParam string
+	hostKeyPath     string
 }
 
 func NewConfig() Config {
@@ -61,13 +63,26 @@ func NewConfig() Config {
 	}
 	log.Printf("TA_RESUME_PREFIX set to '%s'", s3ResumePrefix)
 
+	ssmHostKeyParam, ok := os.LookupEnv("TA_SSM_HOST_KEY_PARAM")
+	if !ok {
+		ssmHostKeyParam = ""
+	}
+	log.Printf("TA_SSM_HOST_KEY_PARAM set to '%s'", ssmHostKeyParam)
+	hostKeyPath, ok := os.LookupEnv("TA_HOST_KEY_PATH")
+	if !ok {
+		hostKeyPath = ".ssh/term_info_ed25519"
+	}
+	log.Printf("TA_HOST_KEY_PATH set to '%s'", hostKeyPath)
+
 	return Config{
-		host:           host,
-		port:           port,
-		csvTmpFile:     csvTmpFile,
-		resumeTmpDir:   resumeTmpDir,
-		s3Bucket:       s3Bucket,
-		s3CsvPrefix:    s3CsvPrefix,
-		s3ResumePrefix: s3ResumePrefix,
+		host:            host,
+		port:            port,
+		csvTmpFile:      csvTmpFile,
+		resumeTmpDir:    resumeTmpDir,
+		s3Bucket:        s3Bucket,
+		s3CsvPrefix:     s3CsvPrefix,
+		s3ResumePrefix:  s3ResumePrefix,
+		ssmHostKeyParam: ssmHostKeyParam,
+		hostKeyPath:     hostKeyPath,
 	}
 }
