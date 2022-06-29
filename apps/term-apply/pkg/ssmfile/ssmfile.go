@@ -10,21 +10,19 @@ import (
 )
 
 func GetParamFromSSM(paramName, path string) error {
-	log.Printf("Searching for Path")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
+		log.Printf("File %s does not exist... creating", path)
 		dir, _ := filepath.Split(path)
 		os.MkdirAll(dir, 0700)
 	}
 
-	log.Printf("Creating File")
 	file, err := os.Create(path)
 	if err != nil {
-		return err //fmt.Errorf("Cannot create ssh host key file: %s", path)
+		return err
 	}
 
 	defer file.Close()
 
-	log.Printf("Opening new session")
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
 	})
@@ -32,11 +30,10 @@ func GetParamFromSSM(paramName, path string) error {
 		return err
 	}
 
-	log.Printf("Creating SSM Client")
 	ssm_client := ssm.New(sess)
 
 	decrypt := true
-	log.Printf("Getting param: %s", paramName)
+	log.Printf("Getting parameter %s from ssm", paramName)
 	output, err := ssm_client.GetParameter(&ssm.GetParameterInput{
 		Name:           &paramName,
 		WithDecryption: &decrypt,
@@ -44,8 +41,6 @@ func GetParamFromSSM(paramName, path string) error {
 	if err != nil {
 		return err
 	}
-
-	log.Printf("Writing to file")
 	_, err = file.WriteString(*output.Parameter.Value)
 	if err != nil {
 		return err
