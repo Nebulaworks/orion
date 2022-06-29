@@ -10,19 +10,6 @@ import (
 )
 
 func GetParamFromSSM(paramName, path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		log.Printf("File %s does not exist... creating", path)
-		dir, _ := filepath.Split(path)
-		os.MkdirAll(dir, 0700)
-	}
-
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-
-	defer file.Close()
-
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
 	})
@@ -41,6 +28,19 @@ func GetParamFromSSM(paramName, path string) error {
 	if err != nil {
 		return err
 	}
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		log.Printf("File %s does not exist... creating", path)
+		dir, _ := filepath.Split(path)
+		os.MkdirAll(dir, 0700)
+	}
+
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
 	_, err = file.WriteString(*output.Parameter.Value)
 	if err != nil {
 		return err
