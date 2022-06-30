@@ -29,7 +29,8 @@ export TA_BUCKET=my-bucket
 ```
 
 4. If necessary, set other [environment variables](#environment-variables) for your specific environment.
-> For most usage, the defaults are fine for local development
+> For most usage, the defaults are fine for local development <br><br>
+> You will also need to make sure that the default AWS configuration has read/write access to your s3 bucket and the region is set correctly. 
 
 5. Create an `uploads` directory if one does not yet exist
 ```
