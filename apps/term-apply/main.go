@@ -22,7 +22,8 @@ func main() {
 
 	s, err := server.NewServer(config)
 	if err != nil {
-		log.Printf("Cannot create server %v", err)
+		log.Printf("Cannot create server %v... exiting", err)
+		os.Exit(1)
 	}
 	s.Start()
 
