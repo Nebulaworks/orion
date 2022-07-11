@@ -6,6 +6,30 @@ term-apply is a custom SSH server used by candidates to submit their resumes
 
 term-apply is maintained and distriubuted as a [nix package](https://github.com/Nebulaworks/nix-garage/blob/master/pkgs/term-apply/default.nix) and [container](https://hub.docker.com/r/nebulaworks/term-apply).
 
+## DynamoDB
+
+term-apply leverages DynamoDB for data storage and retrieval. The general schema for each applicant is as follows:
+
+> applied_date: unix time - number - Sort DDB Key <br>
+> email: candy@date.com - string - Primary/Partition DDB Key <br>
+> name: Candy Date - string <br>
+> github: candydate100 - string <br>
+> role_applied: sr. software engineer - string <br>
+> role_override: string - in the case were their role is different otherwise null <br>
+> resume_review: bool - Resume passed or fail the review <br>
+> resume_review_date: number - resume reviewed date <br>
+> interviews: Map <br>
+>   1: {date: number, pass: bool, notes: binary} <br>
+>   2: {date: number, pass: bool, notes: binary} <br>
+> ignore_workflow: bool - ignore from automation workflow <br>
+> offer_given: bool <br>
+> offer_date: number <br>
+> offer_accepted:  bool <br>
+> offer_accepted_date: number <br>
+> rejected: bool <br>
+> rejected_date: number <br>
+> rejected_msg_override: binary - Message custom to applicant  <br>
+
 ## Development
 
 These instructions recommend using `nix-shell`. If you choose not to, please make sure you have a functional `go 1.17` installation and the `make` command installed.
