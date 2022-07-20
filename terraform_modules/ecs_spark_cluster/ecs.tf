@@ -1,5 +1,5 @@
 resource "aws_ecs_cluster" "spark" {
-  name = "${local.prefix}"
+  name = local.prefix
 
   tags = merge({ "Name" = "${local.prefix}" }, local.common_tags)
 }
@@ -7,14 +7,14 @@ resource "aws_ecs_cluster" "spark" {
 resource "aws_ecs_task_definition" "spark_master" {
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = var.cpu
-  memory                   = var.memory
+  cpu                      = var.master_cpu
+  memory                   = var.master_memory
   family                   = local.prefix
   execution_role_arn       = aws_iam_role.task_execution_role.arn
 
   container_definitions = jsonencode([{
     name  = "${local.prefix}-master"
-    image = "docker.io/bitnami/spark:${var.spark_version}"
+    image = "docker.io/bitnami/spark@sha256:${var.container_sha}"
     environment = [{
       name  = "SPARK_MODE"
       value = "master"
@@ -61,10 +61,10 @@ resource "aws_ecs_service" "spark_master" {
   launch_type                        = "FARGATE"
   scheduling_strategy                = "REPLICA"
 
- load_balancer {
+  load_balancer {
     container_name   = "termapply"
     container_port   = "7077"
-    target_group_arn = aws_lb_target_group.spark_run.arn
+    target_group_arn = aws_lb_target_group.spark_job.arn
   }
 
   load_balancer {
@@ -75,7 +75,7 @@ resource "aws_ecs_service" "spark_master" {
 
   network_configuration {
     security_groups = [aws_security_group.spark.id]
-    subnets         = var.private_subnets
+    subnets         = var.cluster_subnets
   }
 
   tags = merge({ "Name" = "${local.prefix}" }, local.common_tags)
@@ -91,10 +91,10 @@ resource "aws_ecs_task_definition" "spark_worker" {
 
   container_definitions = jsonencode([{
     name  = "${local.prefix}-worker"
-    image = "docker.io/bitnami/spark:${var.spark_version}"
+    image = "docker.io/bitnami/spark@sha256:${var.container_sha}"
     environment = [{
-        name  = "SPARK_MODE"
-        value = "worker"
+      name  = "SPARK_MODE"
+      value = "worker"
       },
       {
         name  = "SPARK_MASTER_URL"
@@ -102,11 +102,11 @@ resource "aws_ecs_task_definition" "spark_worker" {
       },
       {
         name  = "SPARK_WORKER_MEMORY"
-        value = "${var.worker_memory}G"
+        value = "${var.worker_memory / 1024}G"
       },
       {
         name  = "SPARK_WORKER_CORES"
-        value = "4"
+        value = "${var.worker_cpu / 1024}"
       },
       {
         name  = "SPARK_RPC_AUTHENTICATION_ENABLED"
@@ -126,9 +126,9 @@ resource "aws_ecs_task_definition" "spark_worker" {
     }]
     essential = true
     portMappings = [{
-        protocol      = "tcp"
-        containerPort = 8080
-        hostPort      = 8080
+      protocol      = "tcp"
+      containerPort = 8080
+      hostPort      = 8080
       },
       {
         protocol      = "tcp"
@@ -152,8 +152,8 @@ resource "aws_ecs_service" "spark_worker" {
 
   network_configuration {
     security_groups = [aws_security_group.spark.id]
-    subnets         = var.private_subnets
+    subnets         = var.cluster_subnets
   }
 
   tags = merge({ "Name" = "${local.prefix}" }, local.common_tags)
-
+}

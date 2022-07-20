@@ -22,7 +22,7 @@ variable "vpc_id" {
 variable "cluster_subnets" {
   description = "The subnets in which to deploy the services. Required."
   type        = list(string)
-}  
+}
 
 variable "spark_version" {
   description = "The version of Apache Spark to run. Determines which container to pull down. Required."
