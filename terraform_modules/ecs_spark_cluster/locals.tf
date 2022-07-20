@@ -1,9 +1,9 @@
 locals {
-  prefix = "bioinformatics-${var.env}-spark"
+  prefix = "${var.role}-${var.env}-spark"
 
   common_tags = {
     "env"       = var.env
-    "role"      = "spark"
+    "role"      = var.role
     "terraform" = "true"
   }
 }

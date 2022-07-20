@@ -10,11 +10,11 @@ resource "aws_ecs_task_definition" "spark_master" {
   cpu                      = var.cpu
   memory                   = var.memory
   family                   = local.prefix
-  execution_role_arn       = aws_iam_role.spark_task_execution_role.arn
+  execution_role_arn       = aws_iam_role.task_execution_role.arn
 
   container_definitions = jsonencode([{
     name  = "${local.prefix}-master"
-    image = "docker.io/bitnami/spark:3.3.0"
+    image = "docker.io/bitnami/spark:${var.spark_version}"
     environment = [{
       name  = "SPARK_MODE"
       value = "master"
@@ -84,17 +84,17 @@ resource "aws_ecs_service" "spark_master" {
 resource "aws_ecs_task_definition" "spark_worker" {
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = var.cpu
-  memory                   = var.memory
+  cpu                      = var.worker_cpu
+  memory                   = var.worker_memory
   family                   = local.prefix
-  execution_role_arn       = aws_iam_role.spark_task_execution_role.arn
+  execution_role_arn       = aws_iam_role.task_execution_role.arn
 
   container_definitions = jsonencode([{
     name  = "${local.prefix}-worker"
-    image = "docker.io/bitnami/spark:3.3.0"
+    image = "docker.io/bitnami/spark:${var.spark_version}"
     environment = [{
-      name  = "SPARK_MODE"
-      value = "worker"
+        name  = "SPARK_MODE"
+        value = "worker"
       },
       {
         name  = "SPARK_MASTER_URL"
@@ -102,7 +102,7 @@ resource "aws_ecs_task_definition" "spark_worker" {
       },
       {
         name  = "SPARK_WORKER_MEMORY"
-        value = "4G"
+        value = "${var.worker_memory}G"
       },
       {
         name  = "SPARK_WORKER_CORES"
@@ -126,9 +126,9 @@ resource "aws_ecs_task_definition" "spark_worker" {
     }]
     essential = true
     portMappings = [{
-      protocol      = "tcp"
-      containerPort = 8080
-      hostPort      = 8080
+        protocol      = "tcp"
+        containerPort = 8080
+        hostPort      = 8080
       },
       {
         protocol      = "tcp"
@@ -144,7 +144,7 @@ resource "aws_ecs_service" "spark_worker" {
   name                               = local.prefix
   cluster                            = aws_ecs_cluster.spark.id
   task_definition                    = aws_ecs_task_definition.spark_worker.arn
-  desired_count                      = 3
+  desired_count                      = var.worker_count
   deployment_minimum_healthy_percent = 0
   deployment_maximum_percent         = 100
   launch_type                        = "FARGATE"
