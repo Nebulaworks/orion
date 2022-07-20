@@ -2,14 +2,24 @@ import datetime
 import os
 import re
 import sys
+import argparse
 
 from git import Repo
 
-MASTER = os.getenv("GIT_AUTH_BRANCH", default="master")
 
 DATETIME = "%Y-%m-%d %H:%M:%S%z"
 
-BRANCH_FILTER = r"(.*RC\/.*)|([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"
+ap = argparse.ArgumentParser()
+ap.add_argument("-p", "--pattern", required=False, help="regex pattern for BRANCH_FILTER")
+
+args = vars(ap.parse_args())
+
+if args["pattern"] is not None:
+    # A filter patern was passed in
+    pattern = re.compile(args["pattern"])
+    BRANCH_FILTER = pattern
+else:
+    BRANCH_FILTER = r"(.*RC\/.*)|([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)"
 
 
 def get_first_commit(repo, branch):
@@ -35,6 +45,7 @@ def get_divergence_report(repo):
 
         br = str(head)
 
+        # 4 It will use a LIST of "regex" to first look for EXCLUSIONS (commonly named RC branches)
         if re.match(BRANCH_FILTER, br):
             continue
 
@@ -62,7 +73,7 @@ def get_max_len_of_col(repo_list, col_name):
         if curr_len > top_length:
             top_length = curr_len
 
-    return top_length 
+    return top_length
 
 
 def divergence_by_branch(repo, branch):
@@ -115,19 +126,38 @@ def print_repository(repo):
 
 def main():
 
+    # OK, here's how this is going to work.
+    # 1. CLI arg parser will have to be introduced
+
+    # args=argparser()
+
+    # 2. Determine repo_path
+    # Maintain backwards compatibiloty with the environment variable GIT_REPO_PATH
+
     repo_path = os.getenv("GIT_REPO_PATH")
 
-    if repo_path is None:
-        print(
-            "GIT_REPO_PATH not set. Export GIT_REPO_PATH=/path/to/git/repository and try again."
-        )
-        sys.exit(0)
+    # The CLI will be authoritative, so of the env variable is set it will be secondary to the CLI
+    # if args[repo_path]
+    # repo_path = args[repo_path]
+
+    # 3. Then it needs to determine what the TRUNK is
+    # Maintain backards compatibiloty with the environment variable GIT_AUTH_BRANCH
+
+    MASTER = os.getenv("GIT_AUTH_BRANCH", default="master")
+
+    # The CLI will be authoritative, so of the env variable is set it will be secondary to the CLI
+    # if args[repo_trunk]:
+        #MASTER = args[repo_trunk]
+        # after this works, MASTER will be renamed to MAIN for Diversity and Inclusivity Purposes
+
     if MASTER != "master":
         print(
             "GIT_AUTH_BRANCH has been set, using {branch} instead of master...".format(
                 branch=MASTER
             )
         )
+
+    # Once the CLI knows where the repo is, it can initialize the object Repo
     try:
         repo = Repo(repo_path)
     except:
