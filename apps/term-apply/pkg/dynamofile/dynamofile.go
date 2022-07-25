@@ -1,19 +1,27 @@
 package dynamofile
 
 import (
-	"strconv"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
 type Application struct {
-	Applied_date int
+	Applied_date string
 	Github       string
 	Name         string
 	Email        string
 	Role_applied string
+}
+
+func NewApplication(applied_date, github, name, email, role_applied string) Application {
+	return Application{
+		Applied_date: applied_date,
+		Github:       github,
+		Name:         name,
+		Email:        email,
+		Role_applied: role_applied,
+	}
 }
 
 func applicationFromItem(item map[string]*dynamodb.AttributeValue) Application {
@@ -21,8 +29,7 @@ func applicationFromItem(item map[string]*dynamodb.AttributeValue) Application {
 
 	applied_date, exists := item["applied_date"]
 	if exists {
-		i_64, _ := strconv.ParseInt(*(applied_date.N), 10, 32)
-		app.Applied_date = int(i_64)
+		app.Applied_date = *applied_date.N
 	}
 
 	email, exists := item["email"]
@@ -46,7 +53,7 @@ func applicationFromItem(item map[string]*dynamodb.AttributeValue) Application {
 }
 
 // Returns the provided user's most recent application
-func GetApplication(user string, table string) (Application, error) {
+func GetApplication(user, table string) (Application, error) {
 	var app Application
 
 	sess, err := session.NewSessionWithOptions(session.Options{
@@ -58,8 +65,6 @@ func GetApplication(user string, table string) (Application, error) {
 	}
 
 	svc := dynamodb.New(sess)
-
-	// query := "email = :candy@date.com"
 
 	result, err := svc.Query(&dynamodb.QueryInput{
 		TableName:              aws.String(table),
@@ -78,7 +83,7 @@ func GetApplication(user string, table string) (Application, error) {
 }
 
 // Returns all the provided user's applications
-func GetApplications(user string, table string) ([]Application, error) {
+func GetApplications(user, table string) ([]Application, error) {
 	var app []Application
 
 	sess, err := session.NewSessionWithOptions(session.Options{
@@ -109,18 +114,37 @@ func GetApplications(user string, table string) ([]Application, error) {
 	return app, nil
 }
 
-func NewApplication() {
+func UploadApplication(app Application, table string) error {
+	sess, err := session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+		Profile:           "sandbox",
+	})
+	if err != nil {
+		return err
+	}
 
-}
+	svc := dynamodb.New(sess)
 
-func SetApplicationName() {
+	svc.PutItem(&dynamodb.PutItemInput{
+		TableName: &table,
+		Item: map[string]*dynamodb.AttributeValue{
+			"applied_date": {
+				N: &app.Applied_date,
+			},
+			"github": {
+				S: &app.Github,
+			},
+			"name": {
+				S: &app.Name,
+			},
+			"email": {
+				S: &app.Email,
+			},
+			"role_applied": {
+				S: &app.Role_applied,
+			},
+		},
+	})
 
-}
-
-func SetApplicationEmail() {
-
-}
-
-func SetApplicationJob() {
-
+	return nil
 }

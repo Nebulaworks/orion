@@ -7,23 +7,25 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/nebulaworks/orion/apps/term-apply/pkg/dynamofile"
 	"github.com/nebulaworks/orion/apps/term-apply/pkg/s3file"
 )
 
 type ApplicantManager struct {
-	applicants []applicant
-	mu         *sync.RWMutex    // wraps applicant slice access
-	writeChan  chan []applicant // serializes csv file writes
-	resumes    *resumeWatcher
-	bucket     string
-	csvKey     string
+	applicants  []applicant
+	mu          *sync.RWMutex  // wraps applicant slice access
+	writeChan   chan applicant // serializes csv file writes
+	resumes     *resumeWatcher
+	bucket      string
+	csvKey      string
+	dynamoTable string
 }
 
-func NewApplicantManager(path, uploadDir, bucket, resumePrefix, csvPrefix string) (*ApplicantManager, error) {
+func NewApplicantManager(path, uploadDir, bucket, resumePrefix, csvPrefix, dynamodbTable string) (*ApplicantManager, error) {
 	if err := openOrCreateFile(path); err != nil {
 		return nil, err
 	}
-	writeChan := make(chan []applicant)
+	writeChan := make(chan applicant)
 
 	resumes, err := newResumeWatcher(uploadDir, bucket, resumePrefix)
 	if err != nil {
@@ -33,19 +35,20 @@ func NewApplicantManager(path, uploadDir, bucket, resumePrefix, csvPrefix string
 	filename := filepath.Base(path)
 	csvKey := fmt.Sprintf("%s/%s", csvPrefix, filename)
 	am := &ApplicantManager{
-		applicants: []applicant{},
-		mu:         &sync.RWMutex{},
-		writeChan:  writeChan,
-		resumes:    resumes,
-		bucket:     bucket,
-		csvKey:     csvKey,
+		applicants:  []applicant{},
+		mu:          &sync.RWMutex{},
+		writeChan:   writeChan,
+		resumes:     resumes,
+		bucket:      bucket,
+		csvKey:      csvKey,
+		dynamoTable: dynamodbTable,
 	}
 
 	if err := am.readDataFile(path); err != nil {
 		return nil, err
 	}
 
-	go am.writeDataFile(path, writeChan)
+	go am.writeDynamoItem(path, writeChan)
 
 	return am, nil
 }
@@ -87,7 +90,7 @@ func (a *ApplicantManager) AddApplicant(userID, name, email string, role int) er
 				)
 				a.applicants[i] = newApplicant
 				a.mu.Unlock()
-				a.writeChan <- a.applicants
+				a.writeChan <- newApplicant
 			}
 			return nil
 		}
@@ -96,7 +99,7 @@ func (a *ApplicantManager) AddApplicant(userID, name, email string, role int) er
 	log.Printf("Adding new applicant %s with (%s, %s, %s)", userID, name, email, roleStr)
 	a.applicants = append(a.applicants, newApplicant)
 	a.mu.Unlock()
-	a.writeChan <- a.applicants
+	a.writeChan <- newApplicant
 	return nil
 }
 
@@ -125,28 +128,25 @@ func (a *ApplicantManager) readDataFile(filename string) error {
 	return nil
 }
 
-func (a *ApplicantManager) writeDataFile(filename string, writeChan chan []applicant) error {
+func (a *ApplicantManager) writeDynamoItem(filename string, writeChan chan applicant) error {
+	log.Printf("Writing datafile")
 	for {
-		updatedApplicants := <-writeChan
+		var application dynamofile.Application
+
+		applicant := <-writeChan
 		a.mu.RLock()
-		records := [][]string{}
-		for _, applicant := range updatedApplicants {
-			records = append(records, []string{
-				applicant.userID,
-				applicant.name,
-				applicant.email,
-				applicant.role,
-			})
-		}
+
+		application = dynamofile.NewApplication(
+			"123456791", // TEMP APPLICATION TIME
+			applicant.userID,
+			applicant.name,
+			applicant.email,
+			applicant.role,
+		)
 		a.mu.RUnlock()
 
-		if err := writeData(filename, records); err != nil {
-			log.Printf("error writing file %s, %v", filename, err)
-			return err
-		}
-
-		if err := s3file.CopyToS3(a.bucket, filename, a.csvKey); err != nil {
-			log.Printf("error writing to s3 %s, %s, %v", filename, a.csvKey, err)
+		if err := dynamofile.UploadApplication(application, a.dynamoTable); err != nil {
+			log.Printf("Error writing to dynamodb %s, %s, %v", application.Github, a.dynamoTable, err)
 		}
 	}
 }
