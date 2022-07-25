@@ -11,9 +11,9 @@ term-apply is maintained and distriubuted as a [nix package](https://github.com/
 term-apply leverages DynamoDB for data storage and retrieval. The general schema for each applicant is as follows:
 
 > applied_date: unix time - number - Sort DDB Key <br>
-> email: candy@date.com - string - Primary/Partition DDB Key <br>
+> github: candydate100 - string - Primary/Partition DDB Key <br>
 > name: Candy Date - string <br>
-> github: candydate100 - string <br>
+> email: candy@date.com - string <br>
 > role_applied: sr. software engineer - string <br>
 > role_override: string - in the case were their role is different otherwise null <br>
 > resume_review: bool - Resume passed or fail the review <br>
@@ -83,6 +83,7 @@ make test && make build
 | TA_UPLOAD_DIR | the path where temp resumes will be stored before being sent to S3 | "./uploads" |
 | TA_DATAFILE | the csv file name (both locally and in S3) | "applicants.csv" |
 | TA_CSV_PREFIX | the S3 prefix where the `TA_DATAFILE` will be stored | "/term-apply/dev/data" |
+| TA_DYNAMODB_TABLE | the DynamoDB table where data on applicants will be stored | "" |
 | TA_RESUME_PREFIX | the S3 prefix where the uploaded PDFs will be stored | "/term-apply/dev/resumes" |
 | TA_SSM_HOST_KEY_PARAM | name of the SSM Parameter that holds the ssh host key for the runtime environment. If none is given, a host key is automatically generated | "" |
 | TA_HOST_KEY_PATH | the local path where the ssh host key is located and where it will be generated if no key exists at this location. If an SSM Parameter is provided, this is also the target download location for the stored key. | ".ssh/term_info_ed25519" |

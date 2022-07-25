@@ -14,6 +14,7 @@ type Config struct {
 	s3Bucket        string
 	s3CsvPrefix     string
 	s3ResumePrefix  string
+	dynamodbTable   string
 	ssmHostKeyParam string
 	hostKeyPath     string
 }
@@ -63,6 +64,12 @@ func NewConfig() Config {
 	}
 	log.Printf("TA_RESUME_PREFIX set to '%s'", s3ResumePrefix)
 
+	dynamodbTable, ok := os.LookupEnv("TA_DYNAMODB_TABLE")
+	if !ok {
+		dynamodbTable = ""
+	}
+	log.Printf("TA_DYNAMODB_TABLE set to '%s'", dynamodbTable)
+
 	ssmHostKeyParam, ok := os.LookupEnv("TA_SSM_HOST_KEY_PARAM")
 	if !ok {
 		ssmHostKeyParam = ""
@@ -82,6 +89,7 @@ func NewConfig() Config {
 		s3Bucket:        s3Bucket,
 		s3CsvPrefix:     s3CsvPrefix,
 		s3ResumePrefix:  s3ResumePrefix,
+		dynamodbTable:   dynamodbTable,
 		ssmHostKeyParam: ssmHostKeyParam,
 		hostKeyPath:     hostKeyPath,
 	}
