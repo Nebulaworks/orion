@@ -1,4 +1,4 @@
-package dynamofile
+package applicant
 
 import (
 	"github.com/aws/aws-sdk-go/aws"
@@ -6,55 +6,44 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
-type Application struct {
-	Applied_date string
-	Github       string
-	Name         string
-	Email        string
-	Role_applied string
-}
+func applicationFromItem(item map[string]*dynamodb.AttributeValue) application {
+	var app application
 
-func NewApplication(applied_date, github, name, email, role_applied string) Application {
-	return Application{
-		Applied_date: applied_date,
-		Github:       github,
-		Name:         name,
-		Email:        email,
-		Role_applied: role_applied,
-	}
-}
-
-func applicationFromItem(item map[string]*dynamodb.AttributeValue) Application {
-	var app Application
-
-	applied_date, exists := item["applied_date"]
+	appliedDate, exists := item["applied_date"]
 	if exists {
-		app.Applied_date = *applied_date.N
-	}
-
-	email, exists := item["email"]
-	if exists {
-		app.Email = *email.S
-	}
-	name, exists := item["name"]
-	if exists {
-		app.Name = *name.S
+		app.appliedDate = *appliedDate.N
 	}
 	github, exists := item["github"]
 	if exists {
-		app.Github = *github.S
+		app.github = *github.S
 	}
-	role_applied, exists := item["role_applied"]
+	email, exists := item["email"]
 	if exists {
-		app.Role_applied = *role_applied.S
+		app.email = *email.S
+	}
+	name, exists := item["name"]
+	if exists {
+		app.name = *name.S
+	}
+	roleApplied, exists := item["role_applied"]
+	if exists {
+		app.roleApplied = *roleApplied.S
+	}
+	offferGiven, exists := item["offer_given"]
+	if exists {
+		app.offerGiven = *offferGiven.BOOL
+	}
+	rejected, exists := item["rejected"]
+	if exists {
+		app.rejected = *rejected.BOOL
 	}
 
 	return app
 }
 
 // Returns the provided user's most recent application
-func GetApplication(user, table string) (Application, error) {
-	var app Application
+func GetApplication(user, table string) (application, error) {
+	var app application
 
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
@@ -83,8 +72,8 @@ func GetApplication(user, table string) (Application, error) {
 }
 
 // Returns all the provided user's applications
-func GetApplications(user, table string) ([]Application, error) {
-	var app []Application
+func GetApplications(user, table string) ([]application, error) {
+	var app []application
 
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
@@ -114,7 +103,7 @@ func GetApplications(user, table string) ([]Application, error) {
 	return app, nil
 }
 
-func UploadApplication(app Application, table string) error {
+func PutApplication(app application, table string) error {
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
 		Profile:           "sandbox",
@@ -129,19 +118,19 @@ func UploadApplication(app Application, table string) error {
 		TableName: &table,
 		Item: map[string]*dynamodb.AttributeValue{
 			"applied_date": {
-				N: &app.Applied_date,
+				N: &app.appliedDate,
 			},
 			"github": {
-				S: &app.Github,
+				S: &app.github,
 			},
 			"name": {
-				S: &app.Name,
+				S: &app.name,
 			},
 			"email": {
-				S: &app.Email,
+				S: &app.email,
 			},
 			"role_applied": {
-				S: &app.Role_applied,
+				S: &app.roleApplied,
 			},
 		},
 	})

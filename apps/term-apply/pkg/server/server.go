@@ -25,7 +25,7 @@ type Server struct {
 }
 
 func NewServer(c Config) (*Server, error) {
-	am, err := applicant.NewApplicantManager(c.csvTmpFile, c.resumeTmpDir, c.s3Bucket, c.s3ResumePrefix, c.s3CsvPrefix, c.dynamodbTable)
+	am, err := applicant.NewApplicantManager(c.csvTmpFile, c.resumeTmpDir, c.s3Bucket, c.s3ResumePrefix, c.dynamodbTable)
 	if err != nil {
 		return nil, err
 	}
