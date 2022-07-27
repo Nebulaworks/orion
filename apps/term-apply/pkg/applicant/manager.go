@@ -8,13 +8,13 @@ import (
 
 type ApplicantManager struct {
 	mu          *sync.RWMutex    // wraps applicant slice access
-	writeChan   chan application // serializes csv file writes
+	writeChan   chan application // serializes application uploads
 	resumes     *resumeWatcher
 	bucket      string
 	dynamoTable string
 }
 
-func NewApplicantManager(path, uploadDir, bucket, resumePrefix, dynamodbTable string) (*ApplicantManager, error) {
+func NewApplicantManager(uploadDir, bucket, resumePrefix, dynamodbTable string) (*ApplicantManager, error) {
 
 	writeChan := make(chan application)
 
@@ -31,7 +31,7 @@ func NewApplicantManager(path, uploadDir, bucket, resumePrefix, dynamodbTable st
 		dynamoTable: dynamodbTable,
 	}
 
-	go am.writeDynamoItem(path, writeChan)
+	go am.writeDynamoItem(writeChan)
 
 	return am, nil
 }
@@ -52,10 +52,17 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 	}
 
 	a.mu.Lock()
+
 	app, err := GetApplication(github, a.dynamoTable)
-	if err != nil {
+	if _, ok := err.(*emptyResultError); ok {
+		log.Printf("Creating new application for applicant %s with (%s, %s, %s)", github, name, email, roleStr)
+		a.mu.Unlock()
+		a.writeChan <- newApplication
+		return nil
+	} else if err != nil {
 		return err
 	}
+
 	if app.github == github {
 		if app.rejected || app.offerGiven {
 			log.Printf(
@@ -99,14 +106,14 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 	}
 }
 
-func (a *ApplicantManager) writeDynamoItem(filename string, writeChan chan application) error {
+func (a *ApplicantManager) writeDynamoItem(writeChan chan application) error {
 	for {
 		application := <-writeChan
 
 		if err := PutApplication(application, a.dynamoTable); err != nil {
 			log.Printf("Error wrPutApplication %s, %s, %v", application.github, a.dynamoTable, err)
 		} else {
-			log.Printf("Writing to dynamodb %s, %s", application.github, a.dynamoTable)
+			log.Printf("Writing to dynamodb %s, %s", a.dynamoTable, application.github)
 		}
 	}
 }

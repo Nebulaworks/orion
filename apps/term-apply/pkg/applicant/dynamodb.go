@@ -1,10 +1,27 @@
 package applicant
 
 import (
+	"fmt"
+	"log"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
+
+type emptyResultError struct {
+	user string
+}
+
+func newEmptyResult(user string) *emptyResultError {
+	var err emptyResultError
+	err.user = user
+	return &err
+}
+
+func (err *emptyResultError) Error() string {
+	return fmt.Sprintf("No uploads found for user %s", err.user)
+}
 
 func applicationFromItem(item map[string]*dynamodb.AttributeValue) application {
 	var app application
@@ -43,13 +60,13 @@ func applicationFromItem(item map[string]*dynamodb.AttributeValue) application {
 
 // Returns the provided user's most recent application
 func GetApplication(user, table string) (application, error) {
-	var app application
+	log.Printf("Checking DynamoDB for %s", user)
 
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
 	})
 	if err != nil {
-		return app, err
+		return application{}, err
 	}
 
 	svc := dynamodb.New(sess)
@@ -62,12 +79,19 @@ func GetApplication(user, table string) (application, error) {
 		},
 	})
 	if err != nil {
-		return app, err
+		return application{}, err
 	}
 
-	app = applicationFromItem(result.Items[len(result.Items)-1])
+	log.Println("Result successfully returned")
 
-	return app, nil
+	if len(result.Items) > 0 {
+		log.Printf("Found application(s) for %s", user)
+		app := applicationFromItem(result.Items[len(result.Items)-1])
+		return app, nil
+	} else {
+		log.Printf("No applications found for %s", user)
+		return application{}, newEmptyResult(user)
+	}
 }
 
 // Returns all the provided user's applications

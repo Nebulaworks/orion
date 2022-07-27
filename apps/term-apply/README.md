@@ -81,8 +81,6 @@ make test && make build
 | TA_HOST | the interface IP to listen on  | "0.0.0.0" |
 | TA_PORT | the TCP port to listen on | 23234 |
 | TA_UPLOAD_DIR | the path where temp resumes will be stored before being sent to S3 | "./uploads" |
-| TA_DATAFILE | the csv file name (both locally and in S3) | "applicants.csv" |
-| TA_CSV_PREFIX | the S3 prefix where the `TA_DATAFILE` will be stored | "/term-apply/dev/data" |
 | TA_DYNAMODB_TABLE | the DynamoDB table where data on applicants will be stored | "" |
 | TA_RESUME_PREFIX | the S3 prefix where the uploaded PDFs will be stored | "/term-apply/dev/resumes" |
 | TA_SSM_HOST_KEY_PARAM | name of the SSM Parameter that holds the ssh host key for the runtime environment. If none is given, a host key is automatically generated | "" |

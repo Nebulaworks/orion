@@ -9,10 +9,8 @@ import (
 type Config struct {
 	host            string
 	port            int
-	csvTmpFile      string
 	resumeTmpDir    string
 	s3Bucket        string
-	s3CsvPrefix     string
 	s3ResumePrefix  string
 	dynamodbTable   string
 	ssmHostKeyParam string
@@ -40,23 +38,11 @@ func NewConfig() Config {
 	}
 	log.Printf("TA_UPLOAD_DIR set to '%s'", resumeTmpDir)
 
-	csvTmpFile, ok := os.LookupEnv("TA_DATAFILE")
-	if !ok {
-		csvTmpFile = "applicants.csv"
-	}
-	log.Printf("TA_DATAFILE set to '%s'", csvTmpFile)
-
 	s3Bucket, ok := os.LookupEnv("TA_BUCKET")
 	if !ok {
 		s3Bucket = ""
 	}
 	log.Printf("TA_BUCKET set to '%s'", s3Bucket)
-
-	s3CsvPrefix, ok := os.LookupEnv("TA_CSV_PREFIX")
-	if !ok {
-		s3CsvPrefix = "/term-apply/dev/data"
-	}
-	log.Printf("TA_CSV_PREFIX set to '%s'", s3CsvPrefix)
 
 	s3ResumePrefix, ok := os.LookupEnv("TA_RESUME_PREFIX")
 	if !ok {
@@ -84,10 +70,8 @@ func NewConfig() Config {
 	return Config{
 		host:            host,
 		port:            port,
-		csvTmpFile:      csvTmpFile,
 		resumeTmpDir:    resumeTmpDir,
 		s3Bucket:        s3Bucket,
-		s3CsvPrefix:     s3CsvPrefix,
 		s3ResumePrefix:  s3ResumePrefix,
 		dynamodbTable:   dynamodbTable,
 		ssmHostKeyParam: ssmHostKeyParam,
