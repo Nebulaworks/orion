@@ -13,6 +13,7 @@ type Config struct {
 	s3Bucket        string
 	s3ResumePrefix  string
 	dynamodbTable   string
+	dynamodbIndex   string
 	ssmHostKeyParam string
 	hostKeyPath     string
 }
@@ -56,6 +57,12 @@ func NewConfig() Config {
 	}
 	log.Printf("TA_DYNAMODB_TABLE set to '%s'", dynamodbTable)
 
+	dynamodbIndex, ok := os.LookupEnv("TA_DYNAMODB_GSI")
+	if !ok {
+		dynamodbIndex = ""
+	}
+	log.Printf("TA_DYNAMODB_GSI set to '%s'", dynamodbIndex)
+
 	ssmHostKeyParam, ok := os.LookupEnv("TA_SSM_HOST_KEY_PARAM")
 	if !ok {
 		ssmHostKeyParam = ""
@@ -74,6 +81,7 @@ func NewConfig() Config {
 		s3Bucket:        s3Bucket,
 		s3ResumePrefix:  s3ResumePrefix,
 		dynamodbTable:   dynamodbTable,
+		dynamodbIndex:   dynamodbIndex,
 		ssmHostKeyParam: ssmHostKeyParam,
 		hostKeyPath:     hostKeyPath,
 	}

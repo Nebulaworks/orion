@@ -9,6 +9,24 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
+/*
+
+The relevant expected schema for the DynamoDB table is as follows:
+
+> applied_date: unix time - number - Sort DDB Key <br>
+> email: candy@date.com - string - Primary/Partition DDB Key <br>
+> github: candydate100 - string - Secondary Global Index <br>
+> name: Candy Date - string <br>
+> role_applied: sr. software engineer - string <br>
+> offer_given: bool <br>
+> rejected: bool <br>
+
+term-apply users have the ability to modify their email after submitting
+an application. If this happens, the existing record will be deleted after
+copying all other data
+
+*/
+
 type emptyResultError struct {
 	user string
 }
@@ -59,9 +77,7 @@ func applicationFromItem(item map[string]*dynamodb.AttributeValue) application {
 }
 
 // Returns the provided user's most recent application
-func GetApplication(user, table string) (application, error) {
-	log.Printf("Checking DynamoDB for %s", user)
-
+func GetApplication(user, table, index string) (application, error) {
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
 	})
@@ -73,6 +89,7 @@ func GetApplication(user, table string) (application, error) {
 
 	result, err := svc.Query(&dynamodb.QueryInput{
 		TableName:              aws.String(table),
+		IndexName:              aws.String(index),
 		KeyConditionExpression: aws.String("github = :github"),
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":github": {S: aws.String(user)},
@@ -82,10 +99,7 @@ func GetApplication(user, table string) (application, error) {
 		return application{}, err
 	}
 
-	log.Println("Result successfully returned")
-
 	if len(result.Items) > 0 {
-		log.Printf("Found application(s) for %s", user)
 		app := applicationFromItem(result.Items[len(result.Items)-1])
 		return app, nil
 	} else {
@@ -136,7 +150,7 @@ func PutApplication(app application, table string) error {
 	svc := dynamodb.New(sess)
 
 	svc.PutItem(&dynamodb.PutItemInput{
-		TableName: &table,
+		TableName: aws.String(table),
 		Item: map[string]*dynamodb.AttributeValue{
 			"applied_date": {
 				N: &app.appliedDate,
@@ -155,6 +169,80 @@ func PutApplication(app application, table string) error {
 			},
 		},
 	})
+
+	return nil
+}
+
+func UpdateApplication(app application, prevEmail, table string) error {
+	// Create DynamoDB Session
+	sess, err := session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	})
+	if err != nil {
+		return err
+	}
+
+	svc := dynamodb.New(sess)
+
+	// Query record to update to ensure all unchanged values are preserved
+	result, err := svc.Query(&dynamodb.QueryInput{
+		TableName:              aws.String(table),
+		KeyConditionExpression: aws.String("applied_date = :a and email = :e"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":a": {N: aws.String(app.appliedDate)},
+			":e": {S: aws.String(prevEmail)},
+		},
+	})
+	if err != nil {
+		return err
+	} else if len(result.Items) == 0 {
+		return fmt.Errorf("expected record not found: %s (applied at %s)", prevEmail, app.appliedDate)
+	}
+
+	record := result.Items[0]
+
+	// Update values in record
+	record["email"] = &dynamodb.AttributeValue{
+		S: aws.String(app.email),
+	}
+	record["name"] = &dynamodb.AttributeValue{
+		S: aws.String(app.name),
+	}
+	record["role_applied"] = &dynamodb.AttributeValue{
+		S: aws.String(app.roleApplied),
+	}
+
+	items := []*dynamodb.TransactWriteItem{
+		// Queue deleting original record
+		&dynamodb.TransactWriteItem{
+			Delete: &dynamodb.Delete{
+				TableName: aws.String(table),
+				Key: map[string]*dynamodb.AttributeValue{
+					"applied_date": {
+						N: aws.String(app.appliedDate),
+					},
+					"email": {
+						S: aws.String(prevEmail),
+					},
+				},
+			},
+		},
+
+		// Queue recreating record with updated values
+		&dynamodb.TransactWriteItem{
+			Put: &dynamodb.Put{
+				TableName: aws.String(table),
+				Item:      record,
+			},
+		},
+	}
+
+	_, err = svc.TransactWriteItems(&dynamodb.TransactWriteItemsInput{
+		TransactItems: items,
+	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

@@ -7,16 +7,23 @@ import (
 )
 
 type ApplicantManager struct {
-	mu          *sync.RWMutex    // wraps applicant slice access
-	writeChan   chan application // serializes application uploads
-	resumes     *resumeWatcher
-	bucket      string
-	dynamoTable string
+	mu            *sync.RWMutex          // wraps applicant slice access
+	writeChan     chan applicationPacket // serializes application uploads
+	resumes       *resumeWatcher
+	bucket        string
+	dynamodbTable string
+	dynamodbIndex string
 }
 
-func NewApplicantManager(uploadDir, bucket, resumePrefix, dynamodbTable string) (*ApplicantManager, error) {
+type applicationPacket struct {
+	app           application
+	prevEmail     string
+	updateInPlace bool
+}
 
-	writeChan := make(chan application)
+func NewApplicantManager(uploadDir, bucket, resumePrefix, dynamodbTable, dynamodbIndex string) (*ApplicantManager, error) {
+
+	writeChan := make(chan applicationPacket)
 
 	resumes, err := newResumeWatcher(uploadDir, bucket, resumePrefix)
 	if err != nil {
@@ -24,11 +31,12 @@ func NewApplicantManager(uploadDir, bucket, resumePrefix, dynamodbTable string) 
 	}
 
 	am := &ApplicantManager{
-		mu:          &sync.RWMutex{},
-		writeChan:   writeChan,
-		resumes:     resumes,
-		bucket:      bucket,
-		dynamoTable: dynamodbTable,
+		mu:            &sync.RWMutex{},
+		writeChan:     writeChan,
+		resumes:       resumes,
+		bucket:        bucket,
+		dynamodbTable: dynamodbTable,
+		dynamodbIndex: dynamodbIndex,
 	}
 
 	go am.writeDynamoItem(writeChan)
@@ -53,11 +61,11 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 
 	a.mu.Lock()
 
-	app, err := GetApplication(github, a.dynamoTable)
+	app, err := GetApplication(github, a.dynamodbTable, a.dynamodbIndex)
 	if _, ok := err.(*emptyResultError); ok {
 		log.Printf("Creating new application for applicant %s with (%s, %s, %s)", github, name, email, roleStr)
 		a.mu.Unlock()
-		a.writeChan <- newApplication
+		a.writeChan <- applicationPacket{app: newApplication, updateInPlace: false}
 		return nil
 	} else if err != nil {
 		return err
@@ -73,12 +81,12 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 				roleStr,
 			)
 			a.mu.Unlock()
-			a.writeChan <- newApplication
+			a.writeChan <- applicationPacket{app: newApplication, updateInPlace: false}
 		} else {
 			newApplication.appliedDate = app.appliedDate
 			if reflect.DeepEqual(newApplication, app) {
 				log.Printf(
-					"Found existing application for applicant %s with identical fields, no changes with (%s, %s, %s)",
+					"Found open application for applicant %s with identical fields, no changes with (%s, %s, %s)",
 					github,
 					name,
 					email,
@@ -87,33 +95,52 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 				a.mu.Unlock()
 			} else {
 				log.Printf(
-					"Found existing application for applicant %s with updated fields, updating in place with (%s, %s, %s)",
+					"Found open application for applicant %s with updated fields, updating in place with (%s, %s, %s)",
 					github,
 					name,
 					email,
 					roleStr,
 				)
 				a.mu.Unlock()
-				a.writeChan <- newApplication
+				a.writeChan <- applicationPacket{app: newApplication, prevEmail: app.email, updateInPlace: true}
 			}
 		}
 		return nil
 	} else {
 		log.Printf("Creating new application for applicant %s with (%s, %s, %s)", github, name, email, roleStr)
 		a.mu.Unlock()
-		a.writeChan <- newApplication
+		a.writeChan <- applicationPacket{app: newApplication, updateInPlace: false}
 		return nil
 	}
 }
 
-func (a *ApplicantManager) writeDynamoItem(writeChan chan application) error {
+func (a *ApplicantManager) writeDynamoItem(writeChan chan applicationPacket) {
 	for {
-		application := <-writeChan
+		packet := <-writeChan
 
-		if err := PutApplication(application, a.dynamoTable); err != nil {
-			log.Printf("Error wrPutApplication %s, %s, %v", application.github, a.dynamoTable, err)
+		if packet.updateInPlace {
+			if packet.prevEmail == packet.app.email {
+				log.Printf("Updating dynamodb record in %s for %s", a.dynamodbTable, packet.app.github)
+				if err := PutApplication(packet.app, a.dynamodbTable); err != nil {
+					log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
+				} else {
+					log.Printf("Succesful write")
+				}
+			} else {
+				log.Printf("Deleting and recreating dynamodb record in %s for %s", a.dynamodbTable, packet.app.github)
+				if err := UpdateApplication(packet.app, packet.prevEmail, a.dynamodbTable); err != nil {
+					log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
+				} else {
+					log.Printf("Succesful write")
+				}
+			}
 		} else {
-			log.Printf("Writing to dynamodb %s, %s", a.dynamoTable, application.github)
+			log.Printf("Writing new record to dynamodb in %s for %s", a.dynamodbTable, packet.app.github)
+			if err := PutApplication(packet.app, a.dynamodbTable); err != nil {
+				log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
+			} else {
+				log.Printf("Succesful write")
+			}
 		}
 	}
 }
