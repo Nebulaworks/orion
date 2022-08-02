@@ -22,8 +22,9 @@ The relevant expected schema for the DynamoDB table is as follows:
 > rejected: bool <br>
 
 term-apply users have the ability to modify their email after submitting
-an application. If this happens, the existing record will be deleted after
-copying all other data
+an application. If this happens, the existing record will be deleted and
+recreated with updated fields using a transaction to ensure atomic changes.
+Other item edits are done in place.
 
 */
 
