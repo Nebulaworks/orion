@@ -121,14 +121,14 @@ func (a *ApplicantManager) writeDynamoItem(writeChan chan applicationPacket) {
 		if packet.updateInPlace {
 			if packet.prevEmail == packet.app.email {
 				log.Printf("Updating dynamodb record in %s for %s", a.dynamodbTable, packet.app.github)
-				if err := PutApplication(packet.app, a.dynamodbTable); err != nil {
+				if err := UpdateApplication(packet.app, a.dynamodbTable); err != nil {
 					log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
 				} else {
 					log.Printf("Succesful write")
 				}
 			} else {
 				log.Printf("Deleting and recreating dynamodb record in %s for %s", a.dynamodbTable, packet.app.github)
-				if err := UpdateApplication(packet.app, packet.prevEmail, a.dynamodbTable); err != nil {
+				if err := RecreateApplication(packet.app, packet.prevEmail, a.dynamodbTable); err != nil {
 					log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
 				} else {
 					log.Printf("Succesful write")

@@ -150,7 +150,7 @@ func PutApplication(app application, table string) error {
 
 	svc := dynamodb.New(sess)
 
-	svc.PutItem(&dynamodb.PutItemInput{
+	_, err = svc.PutItem(&dynamodb.PutItemInput{
 		TableName: aws.String(table),
 		Item: map[string]*dynamodb.AttributeValue{
 			"applied_date": {
@@ -170,11 +170,55 @@ func PutApplication(app application, table string) error {
 			},
 		},
 	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func UpdateApplication(app application, prevEmail, table string) error {
+func UpdateApplication(app application, table string) error {
+	sess, err := session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	})
+	if err != nil {
+		return err
+	}
+
+	svc := dynamodb.New(sess)
+
+	_, err = svc.UpdateItem(&dynamodb.UpdateItemInput{
+		TableName: aws.String(table),
+		Key: map[string]*dynamodb.AttributeValue{
+			"applied_date": {
+				N: &app.appliedDate,
+			},
+			"email": {
+				S: &app.email,
+			},
+		},
+		UpdateExpression: aws.String("SET #n = :n, #r = :r"),
+		ExpressionAttributeNames: map[string]*string{
+			"#n": aws.String("name"),
+			"#r": aws.String("role_applied"),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":n": {
+				S: &app.name,
+			},
+			":r": {
+				S: &app.roleApplied,
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func RecreateApplication(app application, prevEmail, table string) error {
 	// Create DynamoDB Session
 	sess, err := session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
