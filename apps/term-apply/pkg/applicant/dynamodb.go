@@ -33,9 +33,9 @@ type emptyResultError struct {
 }
 
 func newEmptyResult(user string) *emptyResultError {
-	var err emptyResultError
-	err.user = user
-	return &err
+	return &emptyResultError{
+		user: user,
+	}
 }
 
 func (err *emptyResultError) Error() string {
