@@ -100,43 +100,12 @@ func GetApplication(user, table, index string) (application, error) {
 		return application{}, err
 	}
 
-	if len(result.Items) > 0 {
-		app := applicationFromItem(result.Items[len(result.Items)-1])
-		return app, nil
-	} else {
+	if len(result.Items) == 0 {
 		log.Printf("No applications found for %s", user)
 		return application{}, newEmptyResult(user)
 	}
-}
 
-// Returns all the provided user's applications
-func GetApplications(user, table string) ([]application, error) {
-	var app []application
-
-	sess, err := session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	})
-	if err != nil {
-		return app, err
-	}
-
-	svc := dynamodb.New(sess)
-
-	result, err := svc.Query(&dynamodb.QueryInput{
-		TableName:              aws.String(table),
-		KeyConditionExpression: aws.String("github = :github"),
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":github": {S: aws.String(user)},
-		},
-	})
-	if err != nil {
-		return app, err
-	}
-
-	for _, attr := range result.Items {
-		app = append(app, applicationFromItem(attr))
-	}
-
+	app := applicationFromItem(result.Items[len(result.Items)-1])
 	return app, nil
 }
 
@@ -240,7 +209,9 @@ func RecreateApplication(app application, prevEmail, table string) error {
 	})
 	if err != nil {
 		return err
-	} else if len(result.Items) == 0 {
+	}
+
+	if len(result.Items) == 0 {
 		return fmt.Errorf("expected record not found: %s (applied at %s)", prevEmail, app.appliedDate)
 	}
 
