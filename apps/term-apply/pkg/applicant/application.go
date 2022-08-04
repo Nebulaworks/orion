@@ -16,8 +16,7 @@ type application struct {
 }
 
 func NewApplication(github, name, email, roleApplied string) (application, error) {
-	err := checkForInputErrors(name, email, roleApplied)
-	if err != nil {
+	if err := checkForInputErrors(name, email, roleApplied); err != nil {
 		return application{}, err
 	}
 
