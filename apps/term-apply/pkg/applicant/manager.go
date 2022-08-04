@@ -6,6 +6,14 @@ import (
 	"sync"
 )
 
+type writeState int64
+
+const (
+	newApp      writeState = 0
+	updateApp   writeState = 1
+	recreateApp writeState = 2
+)
+
 type ApplicantManager struct {
 	mu            *sync.RWMutex          // wraps applicant slice access
 	writeChan     chan applicationPacket // serializes application uploads
@@ -16,9 +24,9 @@ type ApplicantManager struct {
 }
 
 type applicationPacket struct {
-	app           application
-	prevEmail     string
-	updateInPlace bool
+	app        application
+	prevEmail  string
+	writeState writeState
 }
 
 func NewApplicantManager(uploadDir, bucket, resumePrefix, dynamodbTable, dynamodbIndex string) (*ApplicantManager, error) {
@@ -62,71 +70,102 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 	a.mu.Lock()
 
 	app, err := GetApplication(github, a.dynamodbTable, a.dynamodbIndex)
+
+	// No application exists: new applicant
 	if _, ok := err.(*emptyResultError); ok {
 		log.Printf("Creating new application for applicant %s with (%s, %s, %s)", github, name, email, roleStr)
 		a.mu.Unlock()
-		a.writeChan <- applicationPacket{app: newApplication, updateInPlace: false}
+		a.writeChan <- applicationPacket{app: newApplication, writeState: newApp}
 		return nil
 	} else if err != nil {
 		return err
 	}
 
-	if app.github == github {
-		if app.rejected || app.offerGiven {
-			log.Printf(
-				"Found closed application for applicant %s, creating new application (%s, %s, %s)",
-				github,
-				name,
-				email,
-				roleStr,
-			)
-			a.mu.Unlock()
-			a.writeChan <- applicationPacket{app: newApplication, updateInPlace: false}
-		} else {
-			newApplication.appliedDate = app.appliedDate
-			if reflect.DeepEqual(newApplication, app) {
-				log.Printf(
-					"Found open application for applicant %s with identical fields, no changes with (%s, %s, %s)",
-					github,
-					name,
-					email,
-					roleStr,
-				)
-				a.mu.Unlock()
-			} else {
-				log.Printf(
-					"Found open application for applicant %s with updated fields, updating in place with (%s, %s, %s)",
-					github,
-					name,
-					email,
-					roleStr,
-				)
-				a.mu.Unlock()
-				a.writeChan <- applicationPacket{app: newApplication, prevEmail: app.email, updateInPlace: true}
-			}
-		}
-		return nil
-	} else {
-		log.Printf("Creating new application for applicant %s with (%s, %s, %s)", github, name, email, roleStr)
+	// Closed application exists: returning applicant
+	if app.rejected || app.offerGiven {
+		log.Printf(
+			"Found closed application for applicant %s, creating new application (%s, %s, %s)",
+			github,
+			name,
+			email,
+			roleStr,
+		)
 		a.mu.Unlock()
-		a.writeChan <- applicationPacket{app: newApplication, updateInPlace: false}
+		a.writeChan <- applicationPacket{app: newApplication, writeState: newApp}
+
 		return nil
 	}
+
+	// Keep original applied date for open applications
+	newApplication.appliedDate = app.appliedDate
+
+	if reflect.DeepEqual(newApplication, app) {
+		log.Printf(
+			"Found open application for applicant %s with identical fields, no changes with (%s, %s, %s)",
+			github,
+			name,
+			email,
+			roleStr,
+		)
+		a.mu.Unlock()
+
+		return nil
+	}
+
+	// Updated application with unchanged email
+	if newApplication.email == app.email {
+		log.Printf(
+			"Found open application for applicant %s with updated fields, updating in place with (%s, %s, %s)",
+			github,
+			name,
+			email,
+			roleStr,
+		)
+		a.mu.Unlock()
+		a.writeChan <- applicationPacket{app: newApplication, writeState: updateApp}
+
+		return nil
+	}
+
+	// Updated application with modified email (recreate necessary)
+	log.Printf(
+		"Found open application for applicant %s with updated fields, updating in place with (%s, %s, %s)",
+		github,
+		name,
+		email,
+		roleStr,
+	)
+	a.mu.Unlock()
+	a.writeChan <- applicationPacket{app: newApplication, prevEmail: app.email, writeState: recreateApp}
+
+	return nil
 }
 
 func (a *ApplicantManager) writeDynamoItem(writeChan chan applicationPacket) {
 	for {
 		packet := <-writeChan
 
-		if packet.updateInPlace {
-			if packet.prevEmail == packet.app.email {
+		switch packet.writeState {
+		case newApp:
+			{
+				log.Printf("Writing new record to dynamodb in %s for %s", a.dynamodbTable, packet.app.github)
+				if err := PutApplication(packet.app, a.dynamodbTable); err != nil {
+					log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
+				} else {
+					log.Printf("Succesful write")
+				}
+			}
+		case updateApp:
+			{
 				log.Printf("Updating dynamodb record in %s for %s", a.dynamodbTable, packet.app.github)
 				if err := UpdateApplication(packet.app, a.dynamodbTable); err != nil {
 					log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
 				} else {
 					log.Printf("Succesful write")
 				}
-			} else {
+			}
+		case recreateApp:
+			{
 				log.Printf("Deleting and recreating dynamodb record in %s for %s", a.dynamodbTable, packet.app.github)
 				if err := RecreateApplication(packet.app, packet.prevEmail, a.dynamodbTable); err != nil {
 					log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
@@ -134,12 +173,9 @@ func (a *ApplicantManager) writeDynamoItem(writeChan chan applicationPacket) {
 					log.Printf("Succesful write")
 				}
 			}
-		} else {
-			log.Printf("Writing new record to dynamodb in %s for %s", a.dynamodbTable, packet.app.github)
-			if err := PutApplication(packet.app, a.dynamodbTable); err != nil {
-				log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
-			} else {
-				log.Printf("Succesful write")
+		default:
+			{
+				log.Printf("Invalid write state")
 			}
 		}
 	}
