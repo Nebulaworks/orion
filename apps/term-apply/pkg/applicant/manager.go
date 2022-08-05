@@ -1,62 +1,64 @@
 package applicant
 
 import (
-	"fmt"
 	"log"
-	"path/filepath"
 	"reflect"
 	"sync"
+)
 
-	"github.com/nebulaworks/orion/apps/term-apply/pkg/s3file"
+type writeState int64
+
+const (
+	newApp      writeState = 0
+	updateApp   writeState = 1
+	recreateApp writeState = 2
 )
 
 type ApplicantManager struct {
-	applicants []applicant
-	mu         *sync.RWMutex    // wraps applicant slice access
-	writeChan  chan []applicant // serializes csv file writes
-	resumes    *resumeWatcher
-	bucket     string
-	csvKey     string
+	mu            *sync.RWMutex          // wraps applicant slice access
+	writeChan     chan applicationPacket // serializes application uploads
+	resumes       *resumeWatcher
+	bucket        string
+	dynamodbTable string
+	dynamodbIndex string
 }
 
-func NewApplicantManager(path, uploadDir, bucket, resumePrefix, csvPrefix string) (*ApplicantManager, error) {
-	if err := openOrCreateFile(path); err != nil {
-		return nil, err
-	}
-	writeChan := make(chan []applicant)
+type applicationPacket struct {
+	app        application
+	prevEmail  string
+	writeState writeState
+}
+
+func NewApplicantManager(uploadDir, bucket, resumePrefix, dynamodbTable, dynamodbIndex string) (*ApplicantManager, error) {
+
+	writeChan := make(chan applicationPacket)
 
 	resumes, err := newResumeWatcher(uploadDir, bucket, resumePrefix)
 	if err != nil {
 		return nil, err
 	}
 
-	filename := filepath.Base(path)
-	csvKey := fmt.Sprintf("%s/%s", csvPrefix, filename)
 	am := &ApplicantManager{
-		applicants: []applicant{},
-		mu:         &sync.RWMutex{},
-		writeChan:  writeChan,
-		resumes:    resumes,
-		bucket:     bucket,
-		csvKey:     csvKey,
+		mu:            &sync.RWMutex{},
+		writeChan:     writeChan,
+		resumes:       resumes,
+		bucket:        bucket,
+		dynamodbTable: dynamodbTable,
+		dynamodbIndex: dynamodbIndex,
 	}
 
-	if err := am.readDataFile(path); err != nil {
-		return nil, err
-	}
-
-	go am.writeDataFile(path, writeChan)
+	go am.writeDynamoItem(writeChan)
 
 	return am, nil
 }
 
-func (a *ApplicantManager) AddApplicant(userID, name, email string, role int) error {
-	roleStr := stringRole(role)
-	newApplicant, err := newApplicant(userID, name, email, roleStr)
+func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied int) error {
+	roleStr := stringRole(roleApplied)
+	newApplication, err := NewApplication(github, name, email, roleStr)
 	if err != nil {
 		log.Printf(
 			"New applicant %s error (%v) with (%s, %s, %s)",
-			userID,
+			github,
 			err,
 			name,
 			email,
@@ -66,91 +68,119 @@ func (a *ApplicantManager) AddApplicant(userID, name, email string, role int) er
 	}
 
 	a.mu.Lock()
-	for i, applicant := range a.applicants {
-		if applicant.userID == userID {
-			if reflect.DeepEqual(newApplicant, applicant) {
-				log.Printf(
-					"Found existing applicant %s with identical fields, no changes with (%s, %s, %s)",
-					userID,
-					name,
-					email,
-					roleStr,
-				)
-				a.mu.Unlock()
-			} else {
-				log.Printf(
-					"Found existing applicant %s with updated fields, updating in place with (%s, %s, %s)",
-					userID,
-					name,
-					email,
-					roleStr,
-				)
-				a.applicants[i] = newApplicant
-				a.mu.Unlock()
-				a.writeChan <- a.applicants
-			}
-			return nil
-		}
-	}
 
-	log.Printf("Adding new applicant %s with (%s, %s, %s)", userID, name, email, roleStr)
-	a.applicants = append(a.applicants, newApplicant)
-	a.mu.Unlock()
-	a.writeChan <- a.applicants
-	return nil
-}
+	app, err := GetApplication(github, a.dynamodbTable, a.dynamodbIndex)
 
-func (a *ApplicantManager) readDataFile(filename string) error {
-	s3file.CopyFromS3(a.bucket, a.csvKey, filename)
-	records, err := readData(filename)
-	if err != nil {
+	// No application exists: new applicant
+	if _, ok := err.(*emptyResultError); ok {
+		log.Printf("Creating new application for applicant %s with (%s, %s, %s)", github, name, email, roleStr)
+		a.mu.Unlock()
+		a.writeChan <- applicationPacket{app: newApplication, writeState: newApp}
+		return nil
+	} else if err != nil {
 		return err
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.applicants = []applicant{}
-	for _, record := range records {
-		if len(record) != 4 {
-			return fmt.Errorf("invalid record %v, fix csv file", record)
-		}
-		a.applicants = append(a.applicants,
-			applicant{
-				userID: record[0],
-				name:   record[1],
-				email:  record[2],
-				role:   record[3],
-			})
+	// Closed application exists: returning applicant
+	if app.rejected || app.offerGiven {
+		log.Printf(
+			"Found closed application for applicant %s, creating new application (%s, %s, %s)",
+			github,
+			name,
+			email,
+			roleStr,
+		)
+		a.mu.Unlock()
+		a.writeChan <- applicationPacket{app: newApplication, writeState: newApp}
+
+		return nil
 	}
+
+	// Keep original applied date for open applications
+	newApplication.appliedDate = app.appliedDate
+
+	if reflect.DeepEqual(newApplication, app) {
+		log.Printf(
+			"Found open application for applicant %s with identical fields, no changes with (%s, %s, %s)",
+			github,
+			name,
+			email,
+			roleStr,
+		)
+		a.mu.Unlock()
+
+		return nil
+	}
+
+	// Updated application with unchanged email
+	if newApplication.email == app.email {
+		log.Printf(
+			"Found open application for applicant %s with updated fields, updating in place with (%s, %s, %s)",
+			github,
+			name,
+			email,
+			roleStr,
+		)
+		a.mu.Unlock()
+		a.writeChan <- applicationPacket{app: newApplication, writeState: updateApp}
+
+		return nil
+	}
+
+	// Updated application with modified email (recreate necessary)
+	log.Printf(
+		"Found open application for applicant %s with updated fields, updating in place with (%s, %s, %s)",
+		github,
+		name,
+		email,
+		roleStr,
+	)
+	a.mu.Unlock()
+	a.writeChan <- applicationPacket{app: newApplication, prevEmail: app.email, writeState: recreateApp}
+
 	return nil
 }
 
-func (a *ApplicantManager) writeDataFile(filename string, writeChan chan []applicant) error {
+func (a *ApplicantManager) writeDynamoItem(writeChan chan applicationPacket) {
 	for {
-		updatedApplicants := <-writeChan
-		a.mu.RLock()
-		records := [][]string{}
-		for _, applicant := range updatedApplicants {
-			records = append(records, []string{
-				applicant.userID,
-				applicant.name,
-				applicant.email,
-				applicant.role,
-			})
-		}
-		a.mu.RUnlock()
+		packet := <-writeChan
 
-		if err := writeData(filename, records); err != nil {
-			log.Printf("error writing file %s, %v", filename, err)
-			return err
-		}
-
-		if err := s3file.CopyToS3(a.bucket, filename, a.csvKey); err != nil {
-			log.Printf("error writing to s3 %s, %s, %v", filename, a.csvKey, err)
+		switch packet.writeState {
+		case newApp:
+			{
+				log.Printf("Writing new record to dynamodb in %s for %s", a.dynamodbTable, packet.app.github)
+				if err := PutApplication(packet.app, a.dynamodbTable); err != nil {
+					log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
+				} else {
+					log.Printf("Succesful write")
+				}
+			}
+		case updateApp:
+			{
+				log.Printf("Updating dynamodb record in %s for %s", a.dynamodbTable, packet.app.github)
+				if err := UpdateApplication(packet.app, a.dynamodbTable); err != nil {
+					log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
+				} else {
+					log.Printf("Succesful write")
+				}
+			}
+		case recreateApp:
+			{
+				log.Printf("Deleting and recreating dynamodb record in %s for %s", a.dynamodbTable, packet.app.github)
+				if err := RecreateApplication(packet.app, packet.prevEmail, a.dynamodbTable); err != nil {
+					log.Printf("Error uploading application for %s in %s: %v", packet.app.github, a.dynamodbTable, err)
+				} else {
+					log.Printf("Succesful write")
+				}
+			}
+		default:
+			{
+				log.Printf("Invalid write state")
+			}
 		}
 	}
 }
 
-func (a *ApplicantManager) HasResume(userID string) bool {
-	return a.resumes.isUploaded(userID)
+func (a *ApplicantManager) HasResume(github string) bool {
+	return a.resumes.isUploaded(github)
 }
