@@ -18,7 +18,6 @@ type ApplicantManager struct {
 	mu            *sync.RWMutex          // wraps applicant slice access
 	writeChan     chan applicationPacket // serializes application uploads
 	resumes       *resumeWatcher
-	bucket        string
 	dynamodbTable string
 	dynamodbIndex string
 }
@@ -29,11 +28,11 @@ type applicationPacket struct {
 	writeState writeState
 }
 
-func NewApplicantManager(uploadDir, bucket, resumePrefix, dynamodbTable, dynamodbIndex string) (*ApplicantManager, error) {
+func NewApplicantManager(bucket, resumePrefix, dynamodbTable, dynamodbIndex string) (*ApplicantManager, error) {
 
 	writeChan := make(chan applicationPacket)
 
-	resumes, err := newResumeWatcher(uploadDir, bucket, resumePrefix)
+	resumes, err := newResumeWatcher(bucket, resumePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +41,6 @@ func NewApplicantManager(uploadDir, bucket, resumePrefix, dynamodbTable, dynamod
 		mu:            &sync.RWMutex{},
 		writeChan:     writeChan,
 		resumes:       resumes,
-		bucket:        bucket,
 		dynamodbTable: dynamodbTable,
 		dynamodbIndex: dynamodbIndex,
 	}
