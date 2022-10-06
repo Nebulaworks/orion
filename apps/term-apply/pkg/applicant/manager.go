@@ -15,34 +15,33 @@ const (
 )
 
 type ApplicantManager struct {
-	mu            *sync.RWMutex          // wraps applicant slice access
+	locks         *LockVendor            // controls per-applicant locking
 	writeChan     chan applicationPacket // serializes application uploads
 	resumes       *resumeWatcher
-	bucket        string
 	dynamodbTable string
 	dynamodbIndex string
 }
 
 type applicationPacket struct {
-	app        application
-	prevEmail  string
-	writeState writeState
+	app           application
+	prevEmail     string
+	writeState    writeState
+	applicantLock *sync.Mutex
 }
 
-func NewApplicantManager(uploadDir, bucket, resumePrefix, dynamodbTable, dynamodbIndex string) (*ApplicantManager, error) {
+func NewApplicantManager(bucket, resumePrefix, dynamodbTable, dynamodbIndex string) (*ApplicantManager, error) {
 
 	writeChan := make(chan applicationPacket)
 
-	resumes, err := newResumeWatcher(uploadDir, bucket, resumePrefix)
+	resumes, err := newResumeWatcher(bucket, resumePrefix)
 	if err != nil {
 		return nil, err
 	}
 
 	am := &ApplicantManager{
-		mu:            &sync.RWMutex{},
+		locks:         NewLockVendor(),
 		writeChan:     writeChan,
 		resumes:       resumes,
-		bucket:        bucket,
 		dynamodbTable: dynamodbTable,
 		dynamodbIndex: dynamodbIndex,
 	}
@@ -67,17 +66,18 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 		return err
 	}
 
-	a.mu.Lock()
+	lock := a.locks.LockForName(github)
+	lock.Lock()
 
 	app, err := GetApplication(github, a.dynamodbTable, a.dynamodbIndex)
 
 	// No application exists: new applicant
 	if _, ok := err.(*emptyResultError); ok {
 		log.Printf("Creating new application for applicant %s with (%s, %s, %s)", github, name, email, roleStr)
-		a.mu.Unlock()
-		a.writeChan <- applicationPacket{app: newApplication, writeState: newApp}
+		a.writeChan <- applicationPacket{app: newApplication, writeState: newApp, applicantLock: lock}
 		return nil
 	} else if err != nil {
+		lock.Unlock()
 		return err
 	}
 
@@ -90,9 +90,7 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 			email,
 			roleStr,
 		)
-		a.mu.Unlock()
-		a.writeChan <- applicationPacket{app: newApplication, writeState: newApp}
-
+		a.writeChan <- applicationPacket{app: newApplication, writeState: newApp, applicantLock: lock}
 		return nil
 	}
 
@@ -107,8 +105,7 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 			email,
 			roleStr,
 		)
-		a.mu.Unlock()
-
+		lock.Unlock()
 		return nil
 	}
 
@@ -121,9 +118,7 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 			email,
 			roleStr,
 		)
-		a.mu.Unlock()
-		a.writeChan <- applicationPacket{app: newApplication, writeState: updateApp}
-
+		a.writeChan <- applicationPacket{app: newApplication, writeState: updateApp, applicantLock: lock}
 		return nil
 	}
 
@@ -135,8 +130,7 @@ func (a *ApplicantManager) AddApplicant(github, name, email string, roleApplied 
 		email,
 		roleStr,
 	)
-	a.mu.Unlock()
-	a.writeChan <- applicationPacket{app: newApplication, prevEmail: app.email, writeState: recreateApp}
+	a.writeChan <- applicationPacket{app: newApplication, prevEmail: app.email, writeState: recreateApp, applicantLock: lock}
 
 	return nil
 }
@@ -178,6 +172,7 @@ func (a *ApplicantManager) writeDynamoItem(writeChan chan applicationPacket) {
 				log.Printf("Invalid write state")
 			}
 		}
+		packet.applicantLock.Unlock()
 	}
 }
 
